@@ -1,0 +1,21 @@
+# Pro-curo Licence Server — Admin Portal (Production)
+# Multi-stage build: Vite → nginx static serving with API proxy
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Default API URL — override via env var for Azure
+ENV API_URL=http://licence-server:3100
+
+EXPOSE 80
+
+# At startup, replace the placeholder in nginx.conf with the actual API URL
+CMD sh -c "sed -i \"s|API_URL_PLACEHOLDER|\$API_URL|g\" /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
