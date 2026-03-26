@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.*
+keys/
+.git
+.gitignore
+*.md
+docs/
+admin-portal/
+pgdata/

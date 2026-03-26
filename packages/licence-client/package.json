@@ -1,0 +1,22 @@
+{
+  "name": "@pro-curo/licence-client",
+  "version": "1.0.0",
+  "description": "Licence validation client for Pro-curo V5 instances — handles check-ins, caching, grace periods, and offline licence files.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": ["pro-curo", "licence", "client"],
+  "author": "Pro-curo Software Limited",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "axios": "^1.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.6.0"
+  }
+}

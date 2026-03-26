@@ -1,0 +1,62 @@
+# Pro-curo Licence Server — Local Development Docker Compose
+# Usage: docker-compose up --build
+
+services:
+  # ─── PostgreSQL Database (Licence Server) ───
+  licence-db:
+    image: postgres:16-alpine
+    container_name: procuro-licence-db
+    environment:
+      POSTGRES_USER: procuro_licence
+      POSTGRES_PASSWORD: licence_dev_password
+      POSTGRES_DB: procuro_licence
+    ports:
+      - "5433:5432" # Port 5433 to avoid conflict with V5's PostgreSQL on 5432
+    volumes:
+      - licence-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U procuro_licence -d procuro_licence"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Licence Server API ───
+  licence-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: procuro-licence-server
+    depends_on:
+      licence-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://procuro_licence:licence_dev_password@licence-db:5432/procuro_licence?schema=public
+      PORT: "3100"
+      NODE_ENV: development
+      JWT_SECRET: dev-jwt-secret-do-not-use-in-production
+      CORS_ORIGIN: http://localhost:5174
+      HMAC_SECRET: dev-hmac-secret-do-not-use-in-production
+      LOG_LEVEL: debug
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  # ─── Admin Portal (React + Vite Dev Server) ───
+  admin-portal:
+    build:
+      context: ./admin-portal
+      dockerfile: Dockerfile
+    container_name: procuro-admin-portal
+    depends_on:
+      - licence-server
+    environment:
+      API_URL: http://licence-server:3100
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./admin-portal/src:/app/src # Hot-reload: mount source code
+    restart: unless-stopped
+
+volumes:
+  licence-pgdata:
+    driver: local

@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Keys (never commit private keys)
+keys/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma (keep migrations — needed for deployment)
+
+# Logs
+*.log
+
+# Docker volumes
+pgdata/
