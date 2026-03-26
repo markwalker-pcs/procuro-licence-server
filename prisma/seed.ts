@@ -83,6 +83,7 @@ async function main() {
       licenceType: LicenceType.PER_USER,
       licensedUsers: 25,
       gracePeriodDays: 30,
+      deploymentModel: DeploymentModel.SAAS,
       expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000), // 6 months
       createdBy: adminUser.id,
       notes: 'Test licence — per-user, active, 25 users',
@@ -102,6 +103,7 @@ async function main() {
       licenceType: LicenceType.PER_USER,
       licensedUsers: 10,
       gracePeriodDays: 7,
+      deploymentModel: DeploymentModel.ON_PREMISES,
       expiryDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days
       createdBy: adminUser.id,
       notes: 'Test licence — per-user, expiring soon, 10 users',
@@ -122,6 +124,7 @@ async function main() {
       licenceType: LicenceType.CONCURRENT,
       licensedUsers: 5, // 5 simultaneous sessions allowed
       gracePeriodDays: 30,
+      deploymentModel: DeploymentModel.ON_PREMISES,
       expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 12 months
       createdBy: adminUser.id,
       notes: 'Test licence — concurrent, 5 sessions, upgrade customer from V4',
