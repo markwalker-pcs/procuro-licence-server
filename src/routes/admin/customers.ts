@@ -106,7 +106,7 @@ const updateCustomerSchema = z.object({
 });
 
 router.patch('/:id', async (req: AdminAuthRequest, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const updates = updateCustomerSchema.parse(req.body);
 
   // Fetch existing customer for audit purposes
@@ -131,7 +131,7 @@ router.patch('/:id', async (req: AdminAuthRequest, res: Response) => {
   // Update customer
   const updatedCustomer = await prisma.customer.update({
     where: { id },
-    data: updates,
+    data: updates as any,
   });
 
   // Build details object for audit log (only changed fields)
@@ -171,7 +171,7 @@ router.patch('/:id', async (req: AdminAuthRequest, res: Response) => {
         action: 'customer.update',
         targetType: 'customer',
         targetId: id,
-        details: changedFields,
+        details: changedFields as any,
       },
     });
   }
