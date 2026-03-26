@@ -45,8 +45,10 @@ async function main() {
     update: {},
     create: {
       id: 'seed-customer-nhs',
+      customerNumber: 'PCSCN-20260326-0001',
       name: 'Southport NHS Foundation Trust',
       contactEmail: 'lab.manager@southport-nhs.example.com',
+      primaryContact: 'Dr Sarah Mitchell',
       deploymentModel: DeploymentModel.SAAS,
       notes: 'Test customer — NHS SaaS deployment',
     },
@@ -59,8 +61,10 @@ async function main() {
     update: {},
     create: {
       id: 'seed-customer-biotech',
+      customerNumber: 'PCSCN-20260326-0002',
       name: 'Meridian Biotech Ltd',
       contactEmail: 'it@meridian-biotech.example.com',
+      primaryContact: 'James Wheeler',
       deploymentModel: DeploymentModel.ON_PREMISES,
       notes: 'Test customer — On-premises air-gapped deployment',
     },
