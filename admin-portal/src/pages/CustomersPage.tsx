@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Typography, Table, Button, Modal, Form, Input, Select, Tag, Space, message, Card,
+  Typography, Table, Button, Modal, Form, Input, Select, Tag, Space, message, Card, Alert,
 } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined } from '@ant-design/icons';
 import api from '../services/api';
 import type { Customer, DeploymentModel } from '../types';
 
@@ -18,8 +18,13 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [form] = Form.useForm();
+  const [editForm] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [deploymentModelChanged, setDeploymentModelChanged] = useState(false);
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -47,6 +52,47 @@ export default function CustomersPage() {
       message.error(err.response?.data?.error || 'Failed to create customer');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleEdit = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setDeploymentModelChanged(false);
+    editForm.setFieldsValue({
+      name: customer.name,
+      primaryContact: customer.primaryContact,
+      contactEmail: customer.contactEmail,
+      contactPhone: customer.contactPhone,
+      deploymentModel: customer.deploymentModel,
+      notes: customer.notes,
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async (values: any) => {
+    if (!editingCustomer) return;
+
+    setEditSubmitting(true);
+    try {
+      await api.patch(`/admin/customers/${editingCustomer.id}`, values);
+      message.success('Customer updated successfully');
+      setEditModalOpen(false);
+      editForm.resetFields();
+      setEditingCustomer(null);
+      setDeploymentModelChanged(false);
+      fetchCustomers();
+    } catch (err: any) {
+      message.error(err.response?.data?.error || 'Failed to update customer');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const handleDeploymentModelChange = () => {
+    if (editingCustomer && editForm.getFieldValue('deploymentModel') !== editingCustomer.deploymentModel) {
+      setDeploymentModelChanged(true);
+    } else {
+      setDeploymentModelChanged(false);
     }
   };
 
@@ -103,6 +149,18 @@ export default function CustomersPage() {
       dataIndex: 'createdAt',
       key: 'createdAt',
       render: (v: string) => new Date(v).toLocaleDateString('en-GB'),
+    },
+    {
+      title: 'Action',
+      key: 'action',
+      width: 100,
+      render: (_: unknown, record: Customer) => (
+        <Button
+          type="text"
+          icon={<EditOutlined />}
+          onClick={() => handleEdit(record)}
+        />
+      ),
     },
   ];
 
@@ -162,6 +220,81 @@ export default function CustomersPage() {
             </Space>
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="Edit Customer"
+        open={editModalOpen}
+        onCancel={() => {
+          setEditModalOpen(false);
+          editForm.resetFields();
+          setEditingCustomer(null);
+          setDeploymentModelChanged(false);
+        }}
+        footer={null}
+        width={520}
+      >
+        {editingCustomer && (
+          <Form form={editForm} layout="vertical" onFinish={handleEditSubmit}>
+            <Form.Item label="Customer Number">
+              <Input
+                value={editingCustomer.customerNumber}
+                disabled
+              />
+            </Form.Item>
+            <Form.Item label="Customer ID">
+              <Input
+                value={editingCustomer.id}
+                disabled
+                style={{ fontSize: 12 }}
+              />
+            </Form.Item>
+            <Form.Item name="name" label="Organisation Name">
+              <Input placeholder="e.g. Southport NHS Foundation Trust" />
+            </Form.Item>
+            <Form.Item name="primaryContact" label="Primary Contact Name">
+              <Input placeholder="e.g. Dr Jane Smith" />
+            </Form.Item>
+            <Form.Item name="contactEmail" label="Contact Email" rules={[{ type: 'email' }]}>
+              <Input placeholder="e.g. lab.manager@example.com" />
+            </Form.Item>
+            <Form.Item name="contactPhone" label="Contact Telephone">
+              <Input placeholder="e.g. 0151 123 4567" />
+            </Form.Item>
+            <Form.Item name="deploymentModel" label="Deployment Model">
+              <Select
+                placeholder="Select deployment model"
+                onChange={handleDeploymentModelChange}
+              >
+                <Select.Option value="SAAS">Model A — SaaS (Hosted)</Select.Option>
+                <Select.Option value="HYBRID">Model B — Hybrid</Select.Option>
+                <Select.Option value="ON_PREMISES">Model C — On-Premises</Select.Option>
+              </Select>
+            </Form.Item>
+            {deploymentModelChanged && (
+              <Alert
+                message="Changing the deployment model will not affect existing licences. New licences will use the updated model."
+                type="warning"
+                showIcon
+                style={{ marginBottom: 16 }}
+              />
+            )}
+            <Form.Item name="notes" label="Notes">
+              <Input.TextArea rows={3} />
+            </Form.Item>
+            <Form.Item>
+              <Space>
+                <Button type="primary" htmlType="submit" loading={editSubmitting}>Update Customer</Button>
+                <Button onClick={() => {
+                  setEditModalOpen(false);
+                  editForm.resetFields();
+                  setEditingCustomer(null);
+                  setDeploymentModelChanged(false);
+                }}>Cancel</Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        )}
       </Modal>
     </div>
   );

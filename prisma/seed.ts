@@ -17,6 +17,9 @@ const prisma = new PrismaClient();
 
 const BCRYPT_ROUNDS = 12;
 
+// Default admin password for development
+const DEFAULT_ADMIN_PASSWORD = 'ProCuro2026!';
+
 // Test licence keys (plaintext — these are hashed before storage)
 const TEST_LICENCE_KEYS = {
   active: 'PCV5-TEST-AAAA-BBBB-CCCC',
@@ -28,11 +31,13 @@ async function main() {
   console.log('Seeding licence server database...\n');
 
   // ─── Admin User ───
+  const hashedPassword = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, BCRYPT_ROUNDS);
   const adminUser = await prisma.adminUser.upsert({
     where: { email: 'dev@pro-curo.com' },
     update: {},
     create: {
       email: 'dev@pro-curo.com',
+      passwordHash: hashedPassword,
       displayName: 'Dev Admin',
       role: AdminRole.ADMIN,
     },
@@ -133,6 +138,9 @@ async function main() {
   console.log(`Licence: ${licence3.id} — CONCURRENT, 5 sessions, expires ${licence3.expiryDate.toISOString().split('T')[0]}`);
 
   console.log('\n─── Seed complete ───');
+  console.log('\nAdmin credentials:');
+  console.log(`  Email:    dev@pro-curo.com`);
+  console.log(`  Password: ${DEFAULT_ADMIN_PASSWORD}`);
   console.log('\nTest licence keys (plaintext — use these for check-in testing):');
   console.log(`  Active (per-user):     ${TEST_LICENCE_KEYS.active}`);
   console.log(`  Expiring (per-user):   ${TEST_LICENCE_KEYS.expiring}`);

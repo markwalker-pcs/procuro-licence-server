@@ -9,10 +9,10 @@
 
 ## Current Status
 
-**Phase:** Phase 1–3 complete, Phase 4 (Licence Client Package) in progress — core implementation done
+**Phase:** Phases 1–4 complete, deployed to Azure
 **Current Build:** PLS-20260326-2230-04
-**Build Status:** Docker build passing, server running locally on port 3100
-**Deployed:** No — local Docker only (production target: Azure App Service B1, UK South)
+**Build Status:** Docker build passing, server running on Azure Container Apps
+**Deployed:** Yes — Azure Container Apps (UK South), 26 March 2026
 **First Successful Build:** 26 March 2026 — health endpoint confirmed at http://localhost:3100/health
 
 ---
@@ -194,20 +194,21 @@ Timeline accelerated — development started March 2026 (originally planned May 
 | Phase 2 — Admin Portal | March 2026 | **Functional** — all pages working in Docker, login, dashboard, customers, licences (with amend/offline), instances, audit log with detail view |
 | Phase 3 — Offline Files | March 2026 | **Complete** — Ed25519 signed offline licence file generation, download as .lic, history, regeneration prompt after amendments |
 | Invoice Tracking | March 2026 | **Complete** — FreeAgent invoice references on licences and amendments, amendment history timeline |
-| Phase 4 — Licence Client Package | March–April 2026 | **In Progress** — `@pro-curo/licence-client` package created, V5 backend + frontend integration done, per-user and concurrent licensing implemented |
-| Phase 5 — Testing & Hardening | April–May 2026 | Not started — E2E tests, security review, pen testing, load testing |
-| Phase 6 — Production Deployment | May 2026 | Not started — Azure deployment, DNS, SSL, monitoring |
+| Phase 4 — Licence Client Package | March 2026 | **Complete** — `@pro-curo/licence-client` package, V5 backend + frontend integration, per-user and concurrent licensing, deployed to Azure |
+| Phase 5 — Testing & Hardening | April–May 2026 | Not started — E2E tests, security review, pen testing, load testing, production auth (replace dev login) |
+| Phase 6 — Production Readiness | May 2026 | Not started — Custom domain, proper auth (Azure AD SSO), monitoring, IP restrictions |
 
 ---
 
 ## Next Steps
 
-1. **Run seed script** — `docker exec -it procuro-licence-server npx prisma db seed`
-2. **Test check-in flow end-to-end** — POST to `/api/v1/check-in` with test licence key
-3. **Test amendment flow** — Issue licence with invoice ref, amend with new invoice ref, verify history
-4. **Test offline file generation** — Generate .lic file, verify Ed25519 signature
-5. **Push to GitHub** — https://github.com/markwalker-pcs/procuro-licence-server.git
-6. **Begin Phase 4** — `@pro-curo/licence-client` npm package for V5 integration
+1. **Deploy V5 Build 25** with licence integration — pointed at the live licence server
+2. **Test check-in flow end-to-end** — V5 instance checking in against the Azure licence server
+3. **Test login enforcement** — verify per-user and concurrent licence limits work in production
+4. **Add production authentication** — replace dev JWT login with password-based or Azure AD SSO
+5. **Set NODE_ENV=production** — currently set to `development` for dev login access
+6. **Custom domain** — e.g. `licence.pro-curo.com`
+7. **Phase 5 — Testing & Hardening** — E2E tests, security review, pen testing
 
 ---
 
@@ -262,9 +263,10 @@ See `.env.example` for full list. Key variables:
 ## Known Issues / TODOs
 
 - [ ] No unit or integration tests yet
-- [ ] Azure AD SSO not implemented (using dev JWT login)
-- [ ] Not pushed to GitHub yet
+- [ ] Azure AD SSO not implemented (using dev JWT login — NODE_ENV=development on Azure temporarily)
+- [x] Pushed to GitHub — https://github.com/markwalker-pcs/procuro-licence-server.git
 - [ ] Licence keys stored as plaintext in dev seed (bcrypt hashing in check-in flow works, but POST /licences stores plaintext — needs fixing before production)
+- [x] Deployed to Azure Container Apps (26 March 2026)
 - [x] OpenSSL added to Alpine Dockerfile (Prisma requirement)
 - [x] Build numbering implemented (PLS- prefix)
 - [x] Initial Prisma migration created and applies successfully
@@ -287,9 +289,67 @@ See `.env.example` for full list. Key variables:
 
 ## Deployment Notes
 
-**Local development:** Docker Compose (`docker-compose up --build`)
-**Production target:** Azure App Service B1 (UK South), Azure Database for PostgreSQL Burstable B1ms
-**Estimated monthly cost:** £27–£52/month
+### Azure Deployment (Live)
+
+**Deployed:** 26 March 2026
+
+| Resource | Name | URL |
+|----------|------|-----|
+| Licence Server API | `procuro-licence-server` | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
+| Admin Portal | `procuro-licence-admin` | https://procuro-licence-admin.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
+| Database | `procuro_licence` on `procuro-db` | Same Azure PostgreSQL server as V5 |
+| Container Registry | `procuroacr` | Image tags: `pls-build04` |
+| Health Check | — | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/health |
+
+**Container App Resources:**
+- API: 0.5 vCPU, 1 GiB memory, 1 replica
+- Admin Portal: 0.25 vCPU, 0.5 GiB memory, 1 replica
+
+**Environment Variables (API):**
+- `DATABASE_URL` — PostgreSQL connection to `procuro_licence` database on `procuro-db`
+- `NODE_ENV=development` (temporary — for dev login access, must be changed to `production` after adding proper auth)
+- `JWT_SECRET` — generated via `openssl rand -hex 32`
+- `HMAC_SECRET` — generated via `openssl rand -hex 32` (V5 instances need the same secret)
+- `CORS_ORIGIN` — locked to admin portal URL
+- `PORT=3100`, `LOG_LEVEL=info`
+
+**Environment Variables (Admin Portal):**
+- `API_URL` — points to the licence server API Container App URL
+
+### Rebuild & Redeploy Commands
+
+```bash
+# From Azure Cloud Shell
+cd ~/procuro-licence-server
+git pull
+
+# Build API image (use unique tag each time)
+az acr build --registry procuroacr --image procuro-licence-server:pls-buildXX --file Dockerfile .
+
+# Build Admin Portal image
+az acr build --registry procuroacr --image procuro-licence-admin:pls-buildXX --file admin-portal/Dockerfile.production ./admin-portal
+
+# Deploy API
+az containerapp update -n procuro-licence-server -g procuro-production --image procuroacr-eshnbwa0fvfshzg0.azurecr.io/procuro-licence-server:pls-buildXX
+
+# Deploy Admin Portal
+az containerapp update -n procuro-licence-admin -g procuro-production --image procuroacr-eshnbwa0fvfshzg0.azurecr.io/procuro-licence-admin:pls-buildXX
+```
+
+**Important:** Always use a unique image tag (e.g. `pls-build05`, `pls-build06`) — Azure caches images by tag.
+
+### Deployment History
+
+| Build | Date | API Tag | Admin Tag | Notes |
+|-------|------|---------|-----------|-------|
+| 04 | 26 March 2026 | pls-build04 | pls-build04 | First Azure deployment. API + admin portal + database seeded. |
+
+### Local Development
+
+**Docker Compose:** `docker-compose up --build`
+**Database port:** 5433 (avoids conflict with V5's PostgreSQL on 5432)
+**API port:** 3100
+**Admin portal port:** 5174 (Vite dev server)
 **GitHub:** https://github.com/markwalker-pcs/procuro-licence-server.git
 
 ---

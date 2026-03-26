@@ -202,6 +202,7 @@ model AdminUser {
   id          String    @id @default(uuid())
   azureAdId   String?   @unique // Azure AD object ID for SSO (null in dev mode)
   email       String    @unique
+  passwordHash String?   // Bcrypt hash for production authentication (null in dev mode)
   displayName String
   role        AdminRole @default(ENGINEER)
   lastLogin   DateTime?

@@ -12,11 +12,11 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const onFinish = async (values: { email: string }) => {
+  const onFinish = async (values: { email: string; password: string }) => {
     setLoading(true);
     setError(null);
     try {
-      await login(values.email);
+      await login(values.email, values.password);
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed. Please try again.');
@@ -42,7 +42,7 @@ export default function LoginPage() {
             <Title level={3} style={{ marginTop: 16 }}>
               Pro-curo Licence Server
             </Title>
-            <Text type="secondary">Admin Portal — Development Login</Text>
+            <Text type="secondary">Admin Portal</Text>
           </div>
 
           {error && <Alert type="error" message={error} showIcon />}
@@ -57,8 +57,19 @@ export default function LoginPage() {
             >
               <Input
                 size="large"
-                placeholder="Admin email (e.g. dev@pro-curo.com)"
+                placeholder="Admin email"
                 autoFocus
+              />
+            </Form.Item>
+            <Form.Item
+              name="password"
+              rules={[
+                { required: true, message: 'Password is required' },
+              ]}
+            >
+              <Input.Password
+                size="large"
+                placeholder="Password"
               />
             </Form.Item>
             <Form.Item>
@@ -67,12 +78,6 @@ export default function LoginPage() {
               </Button>
             </Form.Item>
           </Form>
-
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Development mode — enter the email of a seeded admin user.
-            <br />
-            Production will use Azure AD SSO.
-          </Text>
         </Space>
       </Card>
     </div>

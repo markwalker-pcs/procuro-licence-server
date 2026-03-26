@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 import { config } from '../config';
 import { prisma } from '../config/prisma';
 import { logger } from '../config/logger';
@@ -99,25 +100,17 @@ export function requireRole(...allowedRoles: string[]) {
 }
 
 // ─────────────────────────────────────────────
-// Dev-only: Login endpoint to get a JWT token
-// In production this is replaced by Azure AD SSO
+// Login endpoint to get a JWT token
+// Development: Email-only login
+// Production: Email + password authentication
 // ─────────────────────────────────────────────
 
 import { Router } from 'express';
 
 export const authRouter = Router();
 
-const loginSchema = {
-  email: 'string',
-};
-
 authRouter.post('/login', async (req: Request, res: Response) => {
-  if (!config.isDev) {
-    res.status(404).json({ error: 'Dev login is not available in production.' });
-    return;
-  }
-
-  const { email } = req.body;
+  const { email, password } = req.body;
 
   if (!email) {
     res.status(400).json({ error: 'Email is required.' });
@@ -127,7 +120,55 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   const user = await prisma.adminUser.findUnique({ where: { email } });
 
   if (!user) {
-    res.status(404).json({ error: `No admin user found with email: ${email}` });
+    res.status(401).json({ error: 'Invalid email or password.' });
+    return;
+  }
+
+  // Development mode: email-only login
+  if (config.isDev) {
+    // Update last login
+    await prisma.adminUser.update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() },
+    });
+
+    // Generate JWT
+    const token = jwt.sign(
+      { userId: user.id, email: user.email },
+      config.jwt.secret,
+      { expiresIn: config.jwt.expiry } as jwt.SignOptions
+    );
+
+    logger.info('Admin login (development)', { email: user.email, role: user.role });
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        role: user.role,
+      },
+    });
+    return;
+  }
+
+  // Production mode: require password
+  if (!password) {
+    res.status(400).json({ error: 'Password is required.' });
+    return;
+  }
+
+  if (!user.passwordHash) {
+    res.status(401).json({ error: 'Invalid email or password.' });
+    return;
+  }
+
+  // Verify password
+  const passwordValid = await bcrypt.compare(password, user.passwordHash);
+
+  if (!passwordValid) {
+    res.status(401).json({ error: 'Invalid email or password.' });
     return;
   }
 
@@ -144,7 +185,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     { expiresIn: config.jwt.expiry } as jwt.SignOptions
   );
 
-  logger.info('Admin login', { email: user.email, role: user.role });
+  logger.info('Admin login (production)', { email: user.email, role: user.role });
 
   res.json({
     token,

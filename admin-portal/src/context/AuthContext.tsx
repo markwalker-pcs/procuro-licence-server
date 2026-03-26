@@ -5,7 +5,7 @@ import type { AdminUser } from '../types';
 interface AuthContextType {
   user: AdminUser | null;
   token: string | null;
-  login: (email: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -29,8 +29,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const login = useCallback(async (email: string) => {
-    const response = await api.post('/auth/login', { email });
+  const login = useCallback(async (email: string, password: string) => {
+    const response = await api.post('/auth/login', { email, password });
     const { token: newToken, user: newUser } = response.data;
 
     localStorage.setItem('auth_token', newToken);
