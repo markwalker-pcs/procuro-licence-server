@@ -1,3 +1,3 @@
 // Build ID — update this with each release
 // Format: PLS-YYYYMMDD-HHMM-NN (date, time, serial)
-export const BUILD_ID = 'PLS-20260326-2230-04';
+export const BUILD_ID = 'PLS-20260327-1000-07';

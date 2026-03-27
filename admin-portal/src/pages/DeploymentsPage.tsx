@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import {
   Typography, Table, Button, Modal, Form, Input, InputNumber, Select, Tag, Space, message,
   Card, Steps, Descriptions, Popconfirm, Drawer, Collapse, DatePicker, Checkbox, Tooltip,
-  Dropdown,
+  Dropdown, Alert,
 } from 'antd';
-import { PlusOutlined, EditOutlined, RocketOutlined, SettingOutlined, DeleteOutlined, CopyOutlined, DownOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, RocketOutlined, SettingOutlined, DeleteOutlined, CopyOutlined, DownOutlined, CloudOutlined, HomeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../services/api';
 import type { Customer, Deployment, DatabaseType, ConnectivityType, DeploymentStatus, TenantConfig } from '../types';
@@ -39,6 +39,41 @@ const databasePortDefaults: Record<DatabaseType, number> = {
   MARIADB: 3306,
 };
 
+// Azure SaaS defaults — our own infrastructure
+const SAAS_DEFAULTS = {
+  databaseType: 'POSTGRESQL' as DatabaseType,
+  databaseHost: 'procuro-db.postgres.database.azure.com',
+  databasePort: 5432,
+  connectivityType: 'PRIVATE_LINK' as ConnectivityType,
+};
+
+// Latest deployed image tag — update with each release
+const LATEST_IMAGE_TAG = 'pls-build07';
+
+/**
+ * Generate an acronym from a company/organisation name.
+ * Takes the first letter of each significant word, lowercased.
+ * Strips common suffixes (Ltd, Limited, Inc, PLC, LLP, etc.)
+ * e.g. "Cambridge University Centre for Trophoblast Research" → "cuctr"
+ */
+function generateAcronym(name: string): string {
+  const stopWords = new Set(['for', 'of', 'the', 'and', 'in', 'at', 'by', 'to', 'a', 'an']);
+  const suffixes = new Set(['ltd', 'limited', 'inc', 'incorporated', 'plc', 'llp', 'llc', 'corp', 'corporation', 'co', 'company']);
+
+  const words = name
+    .replace(/[^a-zA-Z\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 0)
+    .filter(w => !suffixes.has(w.toLowerCase()));
+
+  const acronym = words
+    .filter(w => !stopWords.has(w.toLowerCase()))
+    .map(w => w[0].toLowerCase())
+    .join('');
+
+  return acronym || name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 5);
+}
+
 export default function DeploymentsPage() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -55,6 +90,8 @@ export default function DeploymentsPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [editSelectedCustomer, setEditSelectedCustomer] = useState<Customer | null>(null);
   const [statusChangeLoading, setStatusChangeLoading] = useState<string | null>(null);
+  const [deploymentType, setDeploymentType] = useState<'SAAS' | 'HYBRID' | null>(null);
+  const [customerAcronym, setCustomerAcronym] = useState<string>('');
 
   // Tenant config state
   const [configDrawerOpen, setConfigDrawerOpen] = useState(false);
@@ -119,17 +156,50 @@ export default function DeploymentsPage() {
     form_.setFieldValue('databasePort', port);
   };
 
+  const handleCustomerSelected = (customerId: string) => {
+    const customer = customers.find(c => c.id === customerId);
+    setSelectedCustomer(customer || null);
+
+    if (customer) {
+      const isSaas = customer.deploymentModel === 'SAAS';
+      setDeploymentType(isSaas ? 'SAAS' : 'HYBRID');
+
+      const acronym = generateAcronym(customer.name);
+      setCustomerAcronym(acronym);
+
+      if (isSaas) {
+        // Auto-populate SaaS defaults — our Azure infrastructure
+        form.setFieldsValue({
+          databaseType: SAAS_DEFAULTS.databaseType,
+          databaseHost: SAAS_DEFAULTS.databaseHost,
+          databasePort: SAAS_DEFAULTS.databasePort,
+          databaseName: acronym ? `${acronym}_procuro` : '',
+          connectivityType: SAAS_DEFAULTS.connectivityType,
+          deploymentLabel: `${customer.name} Production`,
+          containerAppName: acronym ? `procuro-${acronym}-backend` : '',
+          customDomain: acronym ? `${acronym}.app.pro-curo.com` : '',
+          imageTag: LATEST_IMAGE_TAG,
+        });
+      } else {
+        // Hybrid / On-Premises — suggest naming but leave DB config blank
+        form.setFieldsValue({
+          databaseType: undefined,
+          databaseHost: undefined,
+          databasePort: undefined,
+          databaseName: acronym ? `${acronym}_procuro` : '',
+          connectivityType: undefined,
+          deploymentLabel: `${customer.name} Production`,
+          containerAppName: acronym ? `procuro-${acronym}-backend` : '',
+          customDomain: acronym ? `${acronym}.app.pro-curo.com` : '',
+          imageTag: LATEST_IMAGE_TAG,
+        });
+      }
+    }
+  };
+
   const handleCreateNext = async () => {
     try {
-      const values = await form.validateFields();
-      if (currentStep === 0) {
-        const customer = customers.find(c => c.id === values.customerId);
-        setSelectedCustomer(customer || null);
-      } else if (currentStep === 2) {
-        const customer = customers.find(c => c.id === form.getFieldValue('customerId'));
-        const suggestedLabel = `${customer?.name} Production`;
-        form.setFieldValue('deploymentLabel', suggestedLabel);
-      }
+      await form.validateFields();
       setCurrentStep(currentStep + 1);
     } catch {
       // Form validation failed
@@ -149,6 +219,8 @@ export default function DeploymentsPage() {
       form.resetFields();
       setCurrentStep(0);
       setSelectedCustomer(null);
+      setDeploymentType(null);
+      setCustomerAcronym('');
       fetchDeployments();
     } catch (err: any) {
       message.error(err.response?.data?.error || 'Failed to provision deployment');
@@ -171,6 +243,7 @@ export default function DeploymentsPage() {
       connectivityType: deployment.connectivityType,
       deploymentLabel: deployment.deploymentLabel,
       containerAppName: deployment.containerAppName,
+      customDomain: deployment.customDomain,
       containerAppUrl: deployment.containerAppUrl,
       imageTag: deployment.imageTag,
       notes: deployment.notes,
@@ -539,6 +612,14 @@ export default function DeploymentsPage() {
       render: (type: ConnectivityType | null) => (type ? connectivityLabels[type] : <Text type="secondary">—</Text>),
     },
     {
+      title: 'Domain',
+      dataIndex: 'customDomain',
+      key: 'customDomain',
+      render: (domain: string | null) => (
+        domain ? <Text style={{ fontSize: 12 }}>{domain}</Text> : <Text type="secondary">—</Text>
+      ),
+    },
+    {
       title: 'Image Tag',
       dataIndex: 'imageTag',
       key: 'imageTag',
@@ -620,10 +701,12 @@ export default function DeploymentsPage() {
       content: (
         <Form form={form} layout="vertical">
           <Form.Item name="customerId" label="Customer" rules={[{ required: true, message: 'Please select a customer' }]}>
-            <Select placeholder="Select customer" onChange={(value) => {
-              const customer = customers.find(c => c.id === value);
-              setSelectedCustomer(customer || null);
-            }}>
+            <Select
+              placeholder="Select customer"
+              showSearch
+              optionFilterProp="children"
+              onChange={handleCustomerSelected}
+            >
               {customers.map(c => (
                 <Select.Option key={c.id} value={c.id}>
                   {c.name} ({c.customerNumber})
@@ -632,9 +715,32 @@ export default function DeploymentsPage() {
             </Select>
           </Form.Item>
           {selectedCustomer && (
-            <div style={{ marginTop: 16, padding: '12px', backgroundColor: '#f5f5f5', borderRadius: 4 }}>
-              <Text strong>Deployment Model:</Text>
-              <div>{selectedCustomer.deploymentModel}</div>
+            <div style={{ padding: '16px', backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+              <div style={{ marginBottom: 8 }}>
+                <Tag
+                  color={deploymentType === 'SAAS' ? 'blue' : 'purple'}
+                  icon={deploymentType === 'SAAS' ? <CloudOutlined /> : <HomeOutlined />}
+                  style={{ fontSize: 13, padding: '2px 10px' }}
+                >
+                  {deploymentType === 'SAAS' ? 'SaaS — Pro-curo Azure' : selectedCustomer.deploymentModel === 'ON_PREMISES' ? 'On-Premises — Client Infrastructure' : 'Hybrid — Client Database'}
+                </Tag>
+              </div>
+              {deploymentType === 'SAAS' && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Database, connectivity, and application settings will be pre-filled with our standard Azure configuration.
+                </Text>
+              )}
+              {deploymentType === 'HYBRID' && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  You will need to configure the client's database connection and connectivity details in the next step.
+                </Text>
+              )}
+              {customerAcronym && (
+                <div style={{ marginTop: 8 }}>
+                  <Text strong>Generated Acronym:</Text> <Text code>{customerAcronym}</Text>
+                  <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>(used for database, domain &amp; container naming)</Text>
+                </div>
+              )}
             </div>
           )}
         </Form>
@@ -644,10 +750,20 @@ export default function DeploymentsPage() {
       title: 'Database',
       content: (
         <Form form={form} layout="vertical">
+          {deploymentType === 'SAAS' && (
+            <Alert
+              message="SaaS Deployment — Azure Defaults Applied"
+              description="Database configuration has been pre-filled with our standard Azure setup. You can adjust values if needed."
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          )}
           <Form.Item name="databaseType" label="Database Type" rules={[{ required: true }]}>
             <Select
               placeholder="Select database type"
               onChange={(value) => handleDatabaseTypeChange(value, false)}
+              disabled={deploymentType === 'SAAS'}
             >
               <Select.Option value="POSTGRESQL">PostgreSQL</Select.Option>
               <Select.Option value="SQLSERVER">SQL Server</Select.Option>
@@ -656,16 +772,19 @@ export default function DeploymentsPage() {
             </Select>
           </Form.Item>
           <Form.Item name="databaseHost" label="Database Host" rules={[{ required: true }]}>
-            <Input placeholder="e.g. procuro-db.postgres.database.azure.com" />
+            <Input
+              placeholder="e.g. procuro-db.postgres.database.azure.com"
+              disabled={deploymentType === 'SAAS'}
+            />
           </Form.Item>
           <Form.Item name="databasePort" label="Database Port" rules={[{ required: true }]}>
-            <InputNumber style={{ width: '100%' }} />
+            <InputNumber style={{ width: '100%' }} disabled={deploymentType === 'SAAS'} />
           </Form.Item>
           <Form.Item name="databaseName" label="Database Name" rules={[{ required: true }]}>
-            <Input placeholder="e.g. procuro_acme" />
+            <Input placeholder={customerAcronym ? `e.g. ${customerAcronym}_procuro` : 'e.g. acme_procuro'} />
           </Form.Item>
           <Form.Item name="connectivityType" label="Connectivity Type" rules={[{ required: true }]}>
-            <Select placeholder="Select connectivity type">
+            <Select placeholder="Select connectivity type" disabled={deploymentType === 'SAAS'}>
               <Select.Option value="PRIVATE_LINK">Private Link</Select.Option>
               <Select.Option value="SITE_TO_SITE_VPN">Site-to-Site VPN</Select.Option>
               <Select.Option value="EXPRESSROUTE">ExpressRoute</Select.Option>
@@ -679,17 +798,28 @@ export default function DeploymentsPage() {
       title: 'Application',
       content: (
         <Form form={form} layout="vertical">
+          {deploymentType === 'SAAS' && (
+            <Alert
+              message="Application fields have been pre-filled based on your customer selection."
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          )}
           <Form.Item name="deploymentLabel" label="Deployment Label" rules={[{ required: true }]}>
             <Input placeholder="e.g. Acme Production" />
           </Form.Item>
           <Form.Item name="containerAppName" label="Container App Name">
-            <Input placeholder="e.g. procuro-acme-backend" />
+            <Input placeholder={customerAcronym ? `e.g. procuro-${customerAcronym}-backend` : 'e.g. procuro-acme-backend'} />
+          </Form.Item>
+          <Form.Item name="customDomain" label="Customer Domain">
+            <Input placeholder={customerAcronym ? `e.g. ${customerAcronym}.app.pro-curo.com` : 'e.g. acme.app.pro-curo.com'} />
           </Form.Item>
           <Form.Item name="containerAppUrl" label="Container App URL">
             <Input placeholder="e.g. https://procuro-acme.azurecontainerapps.io" />
           </Form.Item>
           <Form.Item name="imageTag" label="Image Tag">
-            <Input placeholder="e.g. build25" />
+            <Input placeholder={`Latest: ${LATEST_IMAGE_TAG}`} />
           </Form.Item>
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={3} />
@@ -701,6 +831,9 @@ export default function DeploymentsPage() {
       title: 'Review',
       content: (
         <div>
+          <Tag color={deploymentType === 'SAAS' ? 'blue' : 'purple'} style={{ marginBottom: 12, fontSize: 13, padding: '2px 10px' }}>
+            {deploymentType === 'SAAS' ? 'SaaS — Pro-curo Azure' : 'Hybrid — Client Infrastructure'}
+          </Tag>
           <Descriptions bordered size="small" column={1} style={{ marginBottom: 16 }}>
             <Descriptions.Item label="Customer">
               {selectedCustomer?.name}
@@ -725,6 +858,9 @@ export default function DeploymentsPage() {
             </Descriptions.Item>
             <Descriptions.Item label="Container App Name">
               {form.getFieldValue('containerAppName') || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Customer Domain">
+              {form.getFieldValue('customDomain') || '—'}
             </Descriptions.Item>
             <Descriptions.Item label="Container App URL">
               {form.getFieldValue('containerAppUrl') || '—'}
@@ -817,11 +953,14 @@ export default function DeploymentsPage() {
           <Form.Item name="containerAppName" label="Container App Name">
             <Input placeholder="e.g. procuro-acme-backend" />
           </Form.Item>
+          <Form.Item name="customDomain" label="Customer Domain">
+            <Input placeholder="e.g. acme.app.pro-curo.com" />
+          </Form.Item>
           <Form.Item name="containerAppUrl" label="Container App URL">
             <Input placeholder="e.g. https://procuro-acme.azurecontainerapps.io" />
           </Form.Item>
           <Form.Item name="imageTag" label="Image Tag">
-            <Input placeholder="e.g. build25" />
+            <Input placeholder={`Latest: ${LATEST_IMAGE_TAG}`} />
           </Form.Item>
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={3} />
@@ -858,6 +997,9 @@ export default function DeploymentsPage() {
             <Descriptions.Item label="Container App Name">
               {editForm.getFieldValue('containerAppName') || '—'}
             </Descriptions.Item>
+            <Descriptions.Item label="Customer Domain">
+              {editForm.getFieldValue('customDomain') || '—'}
+            </Descriptions.Item>
             <Descriptions.Item label="Container App URL">
               {editForm.getFieldValue('containerAppUrl') || '—'}
             </Descriptions.Item>
@@ -883,6 +1025,8 @@ export default function DeploymentsPage() {
           setModalOpen(true);
           setCurrentStep(0);
           setSelectedCustomer(null);
+          setDeploymentType(null);
+          setCustomerAcronym('');
           form.resetFields();
         }}>
           Provision New Deployment
@@ -907,11 +1051,13 @@ export default function DeploymentsPage() {
           form.resetFields();
           setCurrentStep(0);
           setSelectedCustomer(null);
+          setDeploymentType(null);
+          setCustomerAcronym('');
         }}
         footer={null}
-        width={600}
+        width={640}
       >
-        <Steps current={currentStep} items={createModalSteps.map(step => ({ title: step.title }))} style={{ marginBottom: 24 }} />
+        <Steps current={currentStep} items={createModalSteps.map(step => ({ title: step.title }))} style={{ marginBottom: 24 }} size="small" />
         <div style={{ minHeight: 300 }}>
           {createModalSteps[currentStep].content}
         </div>
@@ -925,6 +1071,8 @@ export default function DeploymentsPage() {
               form.resetFields();
               setCurrentStep(0);
               setSelectedCustomer(null);
+              setDeploymentType(null);
+              setCustomerAcronym('');
             }}>Cancel</Button>
             {currentStep === createModalSteps.length - 1 ? (
               <Button type="primary" onClick={() => handleCreate(form.getFieldsValue())} loading={submitting}>

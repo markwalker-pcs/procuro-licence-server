@@ -10,9 +10,9 @@
 ## Current Status
 
 **Phase:** Phases 1–5 complete, deployed to Azure
-**Current Build:** PLS-20260327-pls-build05
+**Current Build:** PLS-20260327-pls-build06
 **Build Status:** Docker build passing, server running on Azure Container Apps
-**Deployed:** Yes — Azure Container Apps (UK South), Build 05 deployed 27 March 2026
+**Deployed:** Yes — Azure Container Apps (UK South), Build 06 deployed 27 March 2026
 **First Successful Build:** 26 March 2026 — health endpoint confirmed at http://localhost:3100/health
 
 ---
@@ -258,7 +258,7 @@ See `.env.example` for full list. Key variables:
 | PLS-20260326-2100-03 | 26 March 2026 | Phase 3 complete + invoice tracking — offline file generation with Ed25519, licence amendments with FreeAgent invoice refs, audit log detail view, favicon, build number in sidebar |
 | PLS-20260326-2230-04 | 26 March 2026 | Phase 4 — dual licensing (PER_USER + CONCURRENT), configurable grace period, @pro-curo/licence-client package, V5 backend + frontend integration, login enforcement, licence status UI |
 | PLS-20260327-build05 | 27 March 2026 | Phase 5 — Password auth (bcrypt) for admin portal, customer editing (PATCH + edit modal), deployment model change audit logging, NODE_ENV set to production |
-| PLS-20260327-build06 | 27 March 2026 (pending) | Phase 6 — Deployments page (provisioning workflow, 4-step wizard), Tenant Configuration store (per-deployment key-value config, env vars, feature flags, quick-add templates, secret masking), custom domain + SSL cert tracking |
+| PLS-20260327-build06 | 27 March 2026 | Phase 6 — Deployments page (provisioning workflow, 4-step wizard), Tenant Configuration store (per-deployment key-value config, env vars, feature flags, quick-add templates, secret masking), custom domain + SSL cert tracking. TS fixes: adminUser guard, Tag color prop, form value casts, Typography.Title. |
 
 ---
 
@@ -289,21 +289,15 @@ See `.env.example` for full list. Key variables:
 - [x] Password-based authentication (bcrypt) for admin portal in production
 - [x] Customer editing (PATCH endpoint + edit modal with deployment model change warning)
 - [x] NODE_ENV set to production on Azure
-- [ ] Deployments page with provisioning workflow (pending push/deploy — Build 06)
-- [ ] Tenant Configuration store with per-deployment key-value config (pending push/deploy — Build 06)
-- [ ] Prisma migrations for deployments + tenant_configs tables (pending push/deploy — Build 06)
+- [x] Deployments page with provisioning workflow (deployed Build 06, 27 March 2026)
+- [x] Tenant Configuration store with per-deployment key-value config (deployed Build 06, 27 March 2026)
+- [x] Prisma migrations for deployments + tenant_configs tables (deployed Build 06, 27 March 2026)
 
-### Pending Changes (Not Yet Pushed — Build 06)
-
-The following changes are in the workspace files but have **not** been committed, pushed, or deployed:
+### Build 06 Changes (Deployed 27 March 2026)
 
 **New Prisma Models:**
 - `Deployment` — tracks customer deployments (container app name/URL, image tag, database config, connectivity type, custom domain, SSL cert expiry, status)
 - `TenantConfig` — per-deployment key-value configuration store (env vars, feature flags, domain settings, notifications)
-
-**New Prisma Migrations:**
-- `20260327_add_deployments` — creates deployments table with all deployment tracking fields
-- `20260327_add_tenant_configs` — creates tenant_configs table with unique constraint on (deploymentId, configKey)
 
 **New Backend Routes:**
 - `GET/POST/PATCH /api/admin/deployments` — deployment CRUD with audit logging
@@ -316,11 +310,9 @@ The following changes are in the workspace files but have **not** been committed
 - `DeploymentsPage.tsx` — Deployments management with 4-step provisioning wizard, edit modal, status management, and tenant configuration drawer
 - Tenant config drawer with: custom domain/SSL, config entries grouped by category, quick-add templates (Standard V5 Env Vars, Feature Flags), secret masking
 
-**Updated Files:**
-- `App.tsx` — added deployments route
-- `AppLayout.tsx` — added Deployments menu item (RocketOutlined icon)
-- `types/index.ts` — added Deployment, TenantConfig, DeploymentStatus, DatabaseType, ConnectivityType types
-- `prisma/schema.prisma` — added Deployment, TenantConfig models with enums
+**TS Build Fixes:**
+- `deployments.ts` — added `req.adminUser` guard in POST handler (TS18048)
+- `DeploymentsPage.tsx` — `colour` → `color` on Ant Design Tag, `as DatabaseType`/`as ConnectivityType` casts on form values, `Typography.Subtitle` → `Typography.Title`
 
 ---
 
@@ -335,7 +327,7 @@ The following changes are in the workspace files but have **not** been committed
 | Licence Server API | `procuro-licence-server` | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
 | Admin Portal | `procuro-licence-admin` | https://procuro-licence-admin.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
 | Database | `procuro_licence` on `procuro-db` | Same Azure PostgreSQL server as V5 |
-| Container Registry | `procuroacr` | Image tags: `pls-build05` |
+| Container Registry | `procuroacr` | Image tags: `pls-build06` |
 | Health Check | — | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/health |
 
 **Container App Resources:**
@@ -381,6 +373,7 @@ az containerapp update -n procuro-licence-admin -g procuro-production --image pr
 |-------|------|---------|-----------|-------|
 | 04 | 26 March 2026 | pls-build04 | pls-build04 | First Azure deployment. API + admin portal + database seeded. |
 | 05 | 27 March 2026 | pls-build05 | pls-build05 | Password auth for admin portal (bcrypt), customer editing (PATCH endpoint + edit modal), deployment model change audit logging, NODE_ENV set to production. |
+| 06 | 27 March 2026 | pls-build06 | pls-build06 | Deployments page (4-step provisioning wizard), Tenant Configuration store (key-value config, secret masking, quick-add templates), custom domain/SSL tracking, TS build fixes. |
 
 ### Local Development
 
