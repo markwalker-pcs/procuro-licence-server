@@ -509,7 +509,7 @@ export default function DeploymentsPage() {
       dataIndex: 'status',
       key: 'status',
       render: (status: DeploymentStatus) => (
-        <Tag colour={statusColours[status]}>{status}</Tag>
+        <Tag color={statusColours[status]}>{status}</Tag>
       ),
       filters: [
         { text: 'Provisioning', value: 'PROVISIONING' },
@@ -706,7 +706,7 @@ export default function DeploymentsPage() {
               {selectedCustomer?.name}
             </Descriptions.Item>
             <Descriptions.Item label="Database Type">
-              {form.getFieldValue('databaseType') && databaseTypeLabels[form.getFieldValue('databaseType')]}
+              {form.getFieldValue('databaseType') && databaseTypeLabels[form.getFieldValue('databaseType') as DatabaseType]}
             </Descriptions.Item>
             <Descriptions.Item label="Database Host">
               {form.getFieldValue('databaseHost')}
@@ -718,7 +718,7 @@ export default function DeploymentsPage() {
               {form.getFieldValue('databaseName')}
             </Descriptions.Item>
             <Descriptions.Item label="Connectivity Type">
-              {form.getFieldValue('connectivityType') && connectivityLabels[form.getFieldValue('connectivityType')]}
+              {form.getFieldValue('connectivityType') && connectivityLabels[form.getFieldValue('connectivityType') as ConnectivityType]}
             </Descriptions.Item>
             <Descriptions.Item label="Deployment Label">
               {form.getFieldValue('deploymentLabel')}
@@ -838,7 +838,7 @@ export default function DeploymentsPage() {
               {editSelectedCustomer?.name}
             </Descriptions.Item>
             <Descriptions.Item label="Database Type">
-              {editForm.getFieldValue('databaseType') && databaseTypeLabels[editForm.getFieldValue('databaseType')]}
+              {editForm.getFieldValue('databaseType') && databaseTypeLabels[editForm.getFieldValue('databaseType') as DatabaseType]}
             </Descriptions.Item>
             <Descriptions.Item label="Database Host">
               {editForm.getFieldValue('databaseHost')}
@@ -850,7 +850,7 @@ export default function DeploymentsPage() {
               {editForm.getFieldValue('databaseName')}
             </Descriptions.Item>
             <Descriptions.Item label="Connectivity Type">
-              {editForm.getFieldValue('connectivityType') && connectivityLabels[editForm.getFieldValue('connectivityType')]}
+              {editForm.getFieldValue('connectivityType') && connectivityLabels[editForm.getFieldValue('connectivityType') as ConnectivityType]}
             </Descriptions.Item>
             <Descriptions.Item label="Deployment Label">
               {editForm.getFieldValue('deploymentLabel')}
@@ -993,7 +993,7 @@ export default function DeploymentsPage() {
           <>
             {/* Custom Domain Section */}
             <div style={{ marginBottom: 32 }}>
-              <Typography.Subtitle level={5} style={{ marginBottom: 16 }}>Custom Domain</Typography.Subtitle>
+              <Typography.Title level={5} style={{ marginBottom: 16 }}>Custom Domain</Typography.Title>
               <Form form={domainForm} layout="vertical" onFinish={handleSaveDomain}>
                 <Form.Item name="customDomain" label="Custom Domain">
                   <Input placeholder="e.g. app.example.com" />
@@ -1010,7 +1010,7 @@ export default function DeploymentsPage() {
             {/* Configuration Entries Section */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <Typography.Subtitle level={5} style={{ margin: 0 }}>Configuration Entries</Typography.Subtitle>
+                <Typography.Title level={5} style={{ margin: 0 }}>Configuration Entries</Typography.Title>
                 <Space>
                   <Dropdown
                     menu={{
