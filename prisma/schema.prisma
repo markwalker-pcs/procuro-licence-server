@@ -26,7 +26,8 @@ model Customer {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  licences Licence[]
+  licences    Licence[]
+  deployments Deployment[]
 
   @@map("customers")
 }
@@ -35,6 +36,86 @@ enum DeploymentModel {
   SAAS       // Model A — Hosted by Pro-curo Software
   HYBRID     // Model B — Customer-hosted, Pro-curo-managed
   ON_PREMISES // Model C — Customer-managed
+}
+
+// ─────────────────────────────────────────────
+// Customer deployment configurations
+// ─────────────────────────────────────────────
+model Deployment {
+  id                String           @id @default(uuid())
+  customerId        String
+  deploymentLabel   String           // Friendly name, e.g. "ACME Corp Production"
+  status            DeploymentStatus @default(PROVISIONING)
+
+  // Application configuration
+  containerAppName  String?          // Azure Container App name, e.g. "procuro-acme-backend"
+  containerAppUrl   String?          // Full URL, e.g. "https://procuro-acme.grayriver-3c973afe.uksouth.azurecontainerapps.io"
+  imageTag          String?          // Current deployed image tag, e.g. "build25"
+  customDomain      String?          // Custom domain for the deployment
+  sslCertExpiry     DateTime?        // SSL certificate expiry date
+
+  // Database configuration
+  databaseType      DatabaseType     @default(POSTGRESQL)
+  databaseHost      String?          // Hostname or IP
+  databasePort      Int?             // Port number
+  databaseName      String?          // Database/schema name
+  connectivityType  ConnectivityType? // How we connect to customer DB
+
+  // Metadata
+  notes             String?
+  provisionedBy     String           // Admin user ID
+  provisionedAt     DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  configs  TenantConfig[]
+
+  @@index([customerId])
+  @@index([status])
+  @@map("deployments")
+}
+
+// ─────────────────────────────────────────────
+// Per-deployment tenant configuration (key-value store)
+// ─────────────────────────────────────────────
+model TenantConfig {
+  id            String   @id @default(uuid())
+  deploymentId  String
+  category      String   // e.g. "env_var", "feature_flag", "domain", "notification"
+  configKey     String   // e.g. "DATABASE_URL", "CUSTOM_DOMAIN", "ENABLE_AUDIT_EXPORT"
+  configValue   String   // The value (encrypted values prefixed with "enc:")
+  isSecret      Boolean  @default(false) // If true, value is masked in the UI
+  description   String?  // Human-readable description of what this config does
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  deployment Deployment @relation(fields: [deploymentId], references: [id])
+
+  @@unique([deploymentId, configKey])
+  @@index([deploymentId])
+  @@index([category])
+  @@map("tenant_configs")
+}
+
+enum DeploymentStatus {
+  PROVISIONING  // Being set up
+  ACTIVE        // Live and operational
+  SUSPENDED     // Temporarily disabled
+  DECOMMISSIONED // No longer in use
+}
+
+enum DatabaseType {
+  POSTGRESQL
+  SQLSERVER
+  MYSQL
+  MARIADB
+}
+
+enum ConnectivityType {
+  PRIVATE_LINK
+  SITE_TO_SITE_VPN
+  EXPRESSROUTE
+  PUBLIC_ENDPOINT
 }
 
 // ─────────────────────────────────────────────

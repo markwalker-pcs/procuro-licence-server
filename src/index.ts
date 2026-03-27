@@ -16,6 +16,8 @@ import customerRoutes from './routes/admin/customers';
 import licenceRoutes from './routes/admin/licences';
 import instanceRoutes from './routes/admin/instances';
 import dashboardRoutes from './routes/admin/dashboard';
+import deploymentRoutes from './routes/admin/deployments';
+import tenantConfigRoutes from './routes/admin/tenantConfig';
 
 const app = express();
 
@@ -53,6 +55,8 @@ app.use('/api/admin/customers', requireAdminAuth, customerRoutes);
 app.use('/api/admin/licences', requireAdminAuth, licenceRoutes);
 app.use('/api/admin/instances', requireAdminAuth, instanceRoutes);
 app.use('/api/admin/dashboard', requireAdminAuth, dashboardRoutes);
+app.use('/api/admin/deployments', requireAdminAuth, deploymentRoutes);
+app.use('/api/admin/tenant-config', requireAdminAuth, tenantConfigRoutes);
 
 // ─────────────────────────────────────────────
 // Error handling

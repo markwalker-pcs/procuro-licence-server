@@ -128,3 +128,42 @@ export interface Alert {
   customer: string;
   severity: 'warning' | 'critical';
 }
+
+export type DeploymentStatus = 'PROVISIONING' | 'ACTIVE' | 'SUSPENDED' | 'DECOMMISSIONED';
+export type DatabaseType = 'POSTGRESQL' | 'SQLSERVER' | 'MYSQL' | 'MARIADB';
+export type ConnectivityType = 'PRIVATE_LINK' | 'SITE_TO_SITE_VPN' | 'EXPRESSROUTE' | 'PUBLIC_ENDPOINT';
+
+export interface TenantConfig {
+  id: string;
+  deploymentId: string;
+  category: string;
+  configKey: string;
+  configValue: string;
+  isSecret: boolean;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Deployment {
+  id: string;
+  customerId: string;
+  deploymentLabel: string;
+  status: DeploymentStatus;
+  containerAppName: string | null;
+  containerAppUrl: string | null;
+  imageTag: string | null;
+  customDomain: string | null;
+  sslCertExpiry: string | null;
+  databaseType: DatabaseType;
+  databaseHost: string | null;
+  databasePort: number | null;
+  databaseName: string | null;
+  connectivityType: ConnectivityType | null;
+  notes: string | null;
+  provisionedBy: string;
+  provisionedAt: string;
+  updatedAt: string;
+  customer?: { id: string; name: string; customerNumber: string; deploymentModel: DeploymentModel };
+  configs?: TenantConfig[];
+}

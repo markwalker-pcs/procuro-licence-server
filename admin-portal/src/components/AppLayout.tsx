@@ -5,6 +5,7 @@ import {
   TeamOutlined,
   SafetyCertificateOutlined,
   CloudServerOutlined,
+  RocketOutlined,
   AuditOutlined,
   LogoutOutlined,
   UserOutlined,
@@ -21,6 +22,7 @@ const menuItems = [
   { key: '/customers', icon: <TeamOutlined />, label: 'Customers' },
   { key: '/licences', icon: <SafetyCertificateOutlined />, label: 'Licences' },
   { key: '/instances', icon: <CloudServerOutlined />, label: 'Instances' },
+  { key: '/deployments', icon: <RocketOutlined />, label: 'Deployments' },
   { key: '/audit-log', icon: <AuditOutlined />, label: 'Audit Log' },
 ];
 

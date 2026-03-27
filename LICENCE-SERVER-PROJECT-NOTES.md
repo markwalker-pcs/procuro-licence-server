@@ -3,16 +3,16 @@
 > **Owner:** Pro-curo Software Limited
 > **Repository:** https://github.com/markwalker-pcs/procuro-licence-server.git
 > **Architecture Document:** `Pro-curo V5 - Licensing Server Technical Architecture.docx`
-> **Last Updated:** 26 March 2026
+> **Last Updated:** 27 March 2026
 
 ---
 
 ## Current Status
 
-**Phase:** Phases 1–4 complete, deployed to Azure
-**Current Build:** PLS-20260326-2230-04
+**Phase:** Phases 1–5 complete, deployed to Azure
+**Current Build:** PLS-20260327-pls-build05
 **Build Status:** Docker build passing, server running on Azure Container Apps
-**Deployed:** Yes — Azure Container Apps (UK South), 26 March 2026
+**Deployed:** Yes — Azure Container Apps (UK South), Build 05 deployed 27 March 2026
 **First Successful Build:** 26 March 2026 — health endpoint confirmed at http://localhost:3100/health
 
 ---
@@ -257,16 +257,18 @@ See `.env.example` for full list. Key variables:
 | PLS-20260326-1800-02 | 26 March 2026 | Phase 1 complete + Phase 2 scaffolded — full check-in flow, all services (HMAC, crypto, licence, audit), admin routes with JWT auth, admin portal React app with all pages |
 | PLS-20260326-2100-03 | 26 March 2026 | Phase 3 complete + invoice tracking — offline file generation with Ed25519, licence amendments with FreeAgent invoice refs, audit log detail view, favicon, build number in sidebar |
 | PLS-20260326-2230-04 | 26 March 2026 | Phase 4 — dual licensing (PER_USER + CONCURRENT), configurable grace period, @pro-curo/licence-client package, V5 backend + frontend integration, login enforcement, licence status UI |
+| PLS-20260327-build05 | 27 March 2026 | Phase 5 — Password auth (bcrypt) for admin portal, customer editing (PATCH + edit modal), deployment model change audit logging, NODE_ENV set to production |
+| PLS-20260327-build06 | 27 March 2026 (pending) | Phase 6 — Deployments page (provisioning workflow, 4-step wizard), Tenant Configuration store (per-deployment key-value config, env vars, feature flags, quick-add templates, secret masking), custom domain + SSL cert tracking |
 
 ---
 
 ## Known Issues / TODOs
 
 - [ ] No unit or integration tests yet
-- [ ] Azure AD SSO not implemented (using dev JWT login — NODE_ENV=development on Azure temporarily)
+- [ ] Azure AD SSO not implemented (password auth implemented as interim solution)
 - [x] Pushed to GitHub — https://github.com/markwalker-pcs/procuro-licence-server.git
 - [ ] Licence keys stored as plaintext in dev seed (bcrypt hashing in check-in flow works, but POST /licences stores plaintext — needs fixing before production)
-- [x] Deployed to Azure Container Apps (26 March 2026)
+- [x] Deployed to Azure Container Apps (26 March 2026, Build 05 on 27 March)
 - [x] OpenSSL added to Alpine Dockerfile (Prisma requirement)
 - [x] Build numbering implemented (PLS- prefix)
 - [x] Initial Prisma migration created and applies successfully
@@ -284,6 +286,41 @@ See `.env.example` for full list. Key variables:
 - [x] Audit log detail view (double-click to expand)
 - [x] Build number displayed in sidebar
 - [x] Offline file regeneration prompt after licence amendments
+- [x] Password-based authentication (bcrypt) for admin portal in production
+- [x] Customer editing (PATCH endpoint + edit modal with deployment model change warning)
+- [x] NODE_ENV set to production on Azure
+- [ ] Deployments page with provisioning workflow (pending push/deploy — Build 06)
+- [ ] Tenant Configuration store with per-deployment key-value config (pending push/deploy — Build 06)
+- [ ] Prisma migrations for deployments + tenant_configs tables (pending push/deploy — Build 06)
+
+### Pending Changes (Not Yet Pushed — Build 06)
+
+The following changes are in the workspace files but have **not** been committed, pushed, or deployed:
+
+**New Prisma Models:**
+- `Deployment` — tracks customer deployments (container app name/URL, image tag, database config, connectivity type, custom domain, SSL cert expiry, status)
+- `TenantConfig` — per-deployment key-value configuration store (env vars, feature flags, domain settings, notifications)
+
+**New Prisma Migrations:**
+- `20260327_add_deployments` — creates deployments table with all deployment tracking fields
+- `20260327_add_tenant_configs` — creates tenant_configs table with unique constraint on (deploymentId, configKey)
+
+**New Backend Routes:**
+- `GET/POST/PATCH /api/admin/deployments` — deployment CRUD with audit logging
+- `PATCH /api/admin/deployments/:id/status` — deployment status changes
+- `GET/POST /api/admin/tenant-config/:deploymentId` — tenant config CRUD
+- `PATCH/DELETE /api/admin/tenant-config/:deploymentId/:configId` — individual config management
+- `POST /api/admin/tenant-config/:deploymentId/bulk` — bulk upsert for quick-add templates
+
+**New Frontend Pages:**
+- `DeploymentsPage.tsx` — Deployments management with 4-step provisioning wizard, edit modal, status management, and tenant configuration drawer
+- Tenant config drawer with: custom domain/SSL, config entries grouped by category, quick-add templates (Standard V5 Env Vars, Feature Flags), secret masking
+
+**Updated Files:**
+- `App.tsx` — added deployments route
+- `AppLayout.tsx` — added Deployments menu item (RocketOutlined icon)
+- `types/index.ts` — added Deployment, TenantConfig, DeploymentStatus, DatabaseType, ConnectivityType types
+- `prisma/schema.prisma` — added Deployment, TenantConfig models with enums
 
 ---
 
@@ -298,7 +335,7 @@ See `.env.example` for full list. Key variables:
 | Licence Server API | `procuro-licence-server` | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
 | Admin Portal | `procuro-licence-admin` | https://procuro-licence-admin.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
 | Database | `procuro_licence` on `procuro-db` | Same Azure PostgreSQL server as V5 |
-| Container Registry | `procuroacr` | Image tags: `pls-build04` |
+| Container Registry | `procuroacr` | Image tags: `pls-build05` |
 | Health Check | — | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/health |
 
 **Container App Resources:**
@@ -307,7 +344,7 @@ See `.env.example` for full list. Key variables:
 
 **Environment Variables (API):**
 - `DATABASE_URL` — PostgreSQL connection to `procuro_licence` database on `procuro-db`
-- `NODE_ENV=development` (temporary — for dev login access, must be changed to `production` after adding proper auth)
+- `NODE_ENV=production`
 - `JWT_SECRET` — generated via `openssl rand -hex 32`
 - `HMAC_SECRET` — generated via `openssl rand -hex 32` (V5 instances need the same secret)
 - `CORS_ORIGIN` — locked to admin portal URL
@@ -343,6 +380,7 @@ az containerapp update -n procuro-licence-admin -g procuro-production --image pr
 | Build | Date | API Tag | Admin Tag | Notes |
 |-------|------|---------|-----------|-------|
 | 04 | 26 March 2026 | pls-build04 | pls-build04 | First Azure deployment. API + admin portal + database seeded. |
+| 05 | 27 March 2026 | pls-build05 | pls-build05 | Password auth for admin portal (bcrypt), customer editing (PATCH endpoint + edit modal), deployment model change audit logging, NODE_ENV set to production. |
 
 ### Local Development
 
