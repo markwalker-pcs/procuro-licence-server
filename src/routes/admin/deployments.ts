@@ -78,6 +78,11 @@ const createDeploymentSchema = z.object({
 });
 
 router.post('/', async (req: AdminAuthRequest, res: Response) => {
+  if (!req.adminUser) {
+    res.status(401).json({ error: 'Unauthorised' });
+    return;
+  }
+
   const data = createDeploymentSchema.parse(req.body);
 
   const deployment = await prisma.deployment.create({
