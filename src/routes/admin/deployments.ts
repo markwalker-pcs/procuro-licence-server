@@ -83,38 +83,38 @@ router.post('/', async (req: AdminAuthRequest, res: Response) => {
     return;
   }
 
-  const data = createDeploymentSchema.parse(req.body);
+  try {
+    const data = createDeploymentSchema.parse(req.body);
 
-  const deployment = await prisma.deployment.create({
-    data: {
-      customerId: data.customerId,
-      deploymentLabel: data.deploymentLabel,
-      databaseType: data.databaseType,
-      databaseHost: data.databaseHost || null,
-      databasePort: data.databasePort || null,
-      databaseName: data.databaseName || null,
-      connectivityType: data.connectivityType || null,
-      containerAppName: data.containerAppName || null,
-      containerAppUrl: data.containerAppUrl || null,
-      imageTag: data.imageTag || null,
-      customDomain: data.customDomain || null,
-      notes: data.notes || null,
-      provisionedBy: req.adminUser.id,
-    },
-    include: {
-      customer: {
-        select: {
-          id: true,
-          name: true,
-          customerNumber: true,
-          deploymentModel: true,
+    const deployment = await prisma.deployment.create({
+      data: {
+        customerId: data.customerId,
+        deploymentLabel: data.deploymentLabel,
+        databaseType: data.databaseType,
+        databaseHost: data.databaseHost || null,
+        databasePort: data.databasePort || null,
+        databaseName: data.databaseName || null,
+        connectivityType: data.connectivityType || null,
+        containerAppName: data.containerAppName || null,
+        containerAppUrl: data.containerAppUrl || null,
+        imageTag: data.imageTag || null,
+        customDomain: data.customDomain || null,
+        notes: data.notes || null,
+        provisionedBy: req.adminUser.id,
+      },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            customerNumber: true,
+            deploymentModel: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  // Create audit log entry
-  if (req.adminUser) {
+    // Create audit log entry
     await prisma.auditLog.create({
       data: {
         userId: req.adminUser.id,
@@ -128,15 +128,37 @@ router.post('/', async (req: AdminAuthRequest, res: Response) => {
         } as any,
       },
     });
+
+    logger.info('Deployment created', {
+      deploymentId: deployment.id,
+      customerId: data.customerId,
+      deploymentLabel: data.deploymentLabel,
+    });
+
+    res.status(201).json({ data: deployment });
+  } catch (err: any) {
+    logger.error('Failed to create deployment', { error: err.message, body: req.body });
+
+    if (err.name === 'ZodError') {
+      res.status(400).json({
+        error: 'Validation error',
+        details: err.errors?.map((e: any) => ({ field: e.path?.join('.'), message: e.message })),
+      });
+      return;
+    }
+
+    // Prisma unique constraint or foreign key errors
+    if (err.code === 'P2002') {
+      res.status(409).json({ error: 'A deployment with these details already exists' });
+      return;
+    }
+    if (err.code === 'P2003') {
+      res.status(400).json({ error: 'Invalid customer reference — customer not found' });
+      return;
+    }
+
+    res.status(500).json({ error: err.message || 'Failed to create deployment' });
   }
-
-  logger.info('Deployment created', {
-    deploymentId: deployment.id,
-    customerId: data.customerId,
-    deploymentLabel: data.deploymentLabel,
-  });
-
-  res.status(201).json({ data: deployment });
 });
 
 // PATCH /api/admin/deployments/:id — Update a deployment

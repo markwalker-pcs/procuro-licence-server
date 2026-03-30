@@ -51,7 +51,7 @@ const SAAS_DEFAULTS = {
 const AZURE_ENV_SUFFIX = 'grayriver-3c973afe.uksouth.azurecontainerapps.io';
 
 // Latest deployed image tag — update with each release
-const LATEST_IMAGE_TAG = 'pls-build07';
+const LATEST_IMAGE_TAG = 'pls-build08';
 
 // Azure Container Registry
 const ACR_SERVER = 'procuroacr-eshnbwa0fvfshzg0.azurecr.io';
@@ -183,7 +183,6 @@ export default function DeploymentsPage() {
       setCustomerAcronym(acronym);
 
       const appName = acronym ? `procuro-${acronym}-backend` : '';
-      const suggestedUrl = appName ? `https://${appName}.${AZURE_ENV_SUFFIX}` : '';
 
       if (isSaas) {
         // Auto-populate SaaS defaults — our Azure infrastructure
@@ -195,7 +194,7 @@ export default function DeploymentsPage() {
           connectivityType: SAAS_DEFAULTS.connectivityType,
           deploymentLabel: `${customer.name} Production`,
           containerAppName: appName,
-          containerAppUrl: suggestedUrl,
+          containerAppUrl: '',
           customDomain: acronym ? `${acronym}.app.pro-curo.com` : '',
           imageTag: LATEST_IMAGE_TAG,
         });
@@ -209,7 +208,7 @@ export default function DeploymentsPage() {
           connectivityType: undefined,
           deploymentLabel: `${customer.name} Production`,
           containerAppName: appName,
-          containerAppUrl: suggestedUrl,
+          containerAppUrl: '',
           customDomain: acronym ? `${acronym}.app.pro-curo.com` : '',
           imageTag: LATEST_IMAGE_TAG,
         });
@@ -217,9 +216,17 @@ export default function DeploymentsPage() {
     }
   };
 
+  // Field names per wizard step — used for per-step validation
+  const createStepFields: string[][] = [
+    ['customerId'],
+    ['databaseType', 'databaseHost', 'databasePort', 'databaseName', 'connectivityType'],
+    ['deploymentLabel', 'containerAppName', 'customDomain', 'containerAppUrl', 'imageTag', 'notes'],
+    [], // Review step — no validation needed
+  ];
+
   const handleCreateNext = async () => {
     try {
-      await form.validateFields();
+      await form.validateFields(createStepFields[currentStep]);
       setCurrentStep(currentStep + 1);
     } catch {
       // Form validation failed
@@ -271,9 +278,16 @@ export default function DeploymentsPage() {
     setEditModalOpen(true);
   };
 
+  const editStepFields: string[][] = [
+    ['customerId'],
+    ['databaseType', 'databaseHost', 'databasePort', 'databaseName', 'connectivityType'],
+    ['deploymentLabel', 'containerAppName', 'customDomain', 'containerAppUrl', 'imageTag', 'notes'],
+    [],
+  ];
+
   const handleEditNext = async () => {
     try {
-      const values = await editForm.validateFields();
+      const values = await editForm.validateFields(editStepFields[editStep]);
       if (editStep === 0) {
         const customer = customers.find(c => c.id === values.customerId);
         setEditSelectedCustomer(customer || null);
@@ -1089,10 +1103,10 @@ export default function DeploymentsPage() {
           </Form.Item>
           <Form.Item
             name="containerAppUrl"
-            label="Container App URL"
-            extra="Auto-generated from container app name. Confirm after creating the resource in Azure."
+            label="Container App URL (optional — set after Azure setup)"
+            extra="Leave blank during provisioning. Update after creating the Container App in Azure, or use Prepare Azure Setup to generate the script first."
           >
-            <Input placeholder={customerAcronym ? `https://procuro-${customerAcronym}-backend.${AZURE_ENV_SUFFIX}` : 'Created after Azure provisioning'} />
+            <Input placeholder={customerAcronym ? `e.g. https://procuro-${customerAcronym}-backend.${AZURE_ENV_SUFFIX}` : 'Set after Azure provisioning'} />
           </Form.Item>
           <Form.Item name="imageTag" label="Image Tag">
             <Input placeholder={`Latest: ${LATEST_IMAGE_TAG}`} />
@@ -1349,7 +1363,11 @@ export default function DeploymentsPage() {
       >
         <Steps current={currentStep} items={createModalSteps.map(step => ({ title: step.title }))} style={{ marginBottom: 24 }} size="small" />
         <div style={{ minHeight: 300 }}>
-          {createModalSteps[currentStep].content}
+          {createModalSteps.map((step, index) => (
+            <div key={step.title} style={{ display: index === currentStep ? 'block' : 'none' }}>
+              {step.content}
+            </div>
+          ))}
         </div>
         <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between' }}>
           <Button onClick={handleCreatePrev} disabled={currentStep === 0}>
@@ -1392,7 +1410,11 @@ export default function DeploymentsPage() {
       >
         <Steps current={editStep} items={editModalSteps.map(step => ({ title: step.title }))} style={{ marginBottom: 24 }} />
         <div style={{ minHeight: 300 }}>
-          {editModalSteps[editStep].content}
+          {editModalSteps.map((step, index) => (
+            <div key={step.title} style={{ display: index === editStep ? 'block' : 'none' }}>
+              {step.content}
+            </div>
+          ))}
         </div>
         <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between' }}>
           <Button onClick={handleEditPrev} disabled={editStep === 0}>
