@@ -21,6 +21,14 @@ router.get('/', async (_req: Request, res: Response) => {
           customer: { select: { id: true, name: true } },
         },
       },
+      deployment: {
+        select: {
+          id: true,
+          deploymentLabel: true,
+          containerAppName: true,
+          status: true,
+        },
+      },
     },
     orderBy: { lastCheckIn: 'desc' },
   });

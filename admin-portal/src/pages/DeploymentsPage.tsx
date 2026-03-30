@@ -4,7 +4,7 @@ import {
   Card, Steps, Descriptions, Popconfirm, Drawer, Collapse, DatePicker, Checkbox, Tooltip,
   Dropdown, Alert,
 } from 'antd';
-import { PlusOutlined, EditOutlined, RocketOutlined, SettingOutlined, DeleteOutlined, CopyOutlined, DownOutlined, CloudOutlined, HomeOutlined, FileTextOutlined, PrinterOutlined, CodeOutlined, ArrowUpOutlined, PauseCircleOutlined, StopOutlined, PlayCircleOutlined, GithubOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, RocketOutlined, SettingOutlined, DeleteOutlined, CopyOutlined, DownOutlined, DownloadOutlined, CloudOutlined, HomeOutlined, FileTextOutlined, PrinterOutlined, CodeOutlined, ArrowUpOutlined, PauseCircleOutlined, StopOutlined, PlayCircleOutlined, GithubOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../services/api';
 import type { Customer, Deployment, DatabaseType, ConnectivityType, DeploymentStatus, TenantConfig } from '../types';
@@ -766,8 +766,7 @@ export default function DeploymentsPage() {
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push(`# STEP 4: Set Backend Environment Variables`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# NOTE: Replace <DB_USER>, <DB_PASSWORD>, <LICENCE_KEY>, <LICENCE_HMAC_SECRET>`);
-      lines.push(`# with actual credentials from Azure Key Vault / Licence Server admin portal.`);
+      lines.push(`# NOTE: Replace <DB_USER> and <DB_PASSWORD> with the Azure PostgreSQL credentials.`);
       lines.push('');
       lines.push(`az containerapp update \\`);
       lines.push(`  --name ${appName} \\`);
@@ -894,8 +893,7 @@ export default function DeploymentsPage() {
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push(`# STEP 4: Set Environment Variables (once connectivity confirmed)`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# NOTE: Replace <CLIENT_DB_URL>, <LICENCE_KEY>, <LICENCE_HMAC_SECRET>`);
-      lines.push(`# with actual credentials.`);
+      lines.push(`# NOTE: Replace <CLIENT_DB_URL> with the client-provided database connection string.`);
       lines.push('');
       lines.push(`az containerapp update \\`);
       lines.push(`  --name ${appName} \\`);
@@ -972,6 +970,22 @@ export default function DeploymentsPage() {
       printWindow.document.close();
       printWindow.print();
     }
+  };
+
+  const handleDownloadBrief = () => {
+    const script = generateBriefScript();
+    const customerName = briefCustomer?.name?.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase() || 'setup';
+    const filename = `procuro-setup-${customerName}.sh`;
+    const blob = new Blob([script], { type: 'text/x-shellscript;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    message.success(`Downloaded ${filename}`);
   };
 
   // ─── Setup Scripts Generator (post-provisioning) ───
@@ -2433,6 +2447,7 @@ export default function DeploymentsPage() {
             </Button>,
           ] : [
             <Button key="print" icon={<PrinterOutlined />} onClick={handlePrintBrief}>Print</Button>,
+            <Button key="download" icon={<DownloadOutlined />} onClick={handleDownloadBrief}>Download .sh</Button>,
             <Button key="copy" type="primary" icon={<CopyOutlined />} onClick={handleCopyBrief}>
               Copy Script to Clipboard
             </Button>,
@@ -2608,7 +2623,7 @@ export default function DeploymentsPage() {
           <Card
             size="small"
             title="Azure CLI Setup Script"
-            extra={<Button size="small" icon={<CopyOutlined />} onClick={handleCopyBrief}>Copy</Button>}
+            extra={<Space><Button size="small" icon={<DownloadOutlined />} onClick={handleDownloadBrief}>Download .sh</Button><Button size="small" icon={<CopyOutlined />} onClick={handleCopyBrief}>Copy</Button></Space>}
           >
             <pre style={{
               backgroundColor: '#1e1e1e',

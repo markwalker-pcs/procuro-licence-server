@@ -55,6 +55,7 @@ async function main() {
       contactEmail: 'lab.manager@southport-nhs.example.com',
       primaryContact: 'Dr Sarah Mitchell',
       deploymentModel: DeploymentModel.SAAS,
+      customerAcronym: 'southportnhs',
       notes: 'Test customer — NHS SaaS deployment',
     },
   });
@@ -71,6 +72,7 @@ async function main() {
       contactEmail: 'it@meridian-biotech.example.com',
       primaryContact: 'James Wheeler',
       deploymentModel: DeploymentModel.ON_PREMISES,
+      customerAcronym: 'meridianbio',
       notes: 'Test customer — On-premises air-gapped deployment',
     },
   });

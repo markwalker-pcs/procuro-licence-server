@@ -59,6 +59,7 @@ export interface LicenceAmendment {
 export interface Instance {
   id: string;
   licenceId: string;
+  deploymentId: string | null;
   instanceUuid: string;
   softwareVersion: string | null;
   lastCheckIn: string | null;
@@ -72,6 +73,12 @@ export interface Instance {
     status: LicenceStatus;
     customer: { id: string; name: string };
   };
+  deployment?: {
+    id: string;
+    deploymentLabel: string;
+    containerAppName: string | null;
+    status: DeploymentStatus;
+  } | null;
 }
 
 export interface CheckIn {

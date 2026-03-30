@@ -12,7 +12,7 @@
 **Phase:** Phases 1–6 complete, deployed to Azure
 **Current Build:** PLS-20260330-1730-12
 **Build Status:** Docker build passing, server running on Azure Container Apps
-**Deployed:** Build 11 — Azure Container Apps (UK South), deployed 30 March 2026. Build 12 pending deployment.
+**Deployed:** Build 12 — Azure Container Apps (UK South), deployed 30 March 2026.
 **First Successful Build:** 26 March 2026 — health endpoint confirmed at http://localhost:3100/health
 
 ---
@@ -333,7 +333,7 @@ See `.env.example` for full list. Key variables:
 | Licence Server API | `procuro-licence-server` | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
 | Admin Portal | `procuro-licence-admin` | https://procuro-licence-admin.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
 | Database | `procuro_licence` on `procuro-db` | Same Azure PostgreSQL server as V5 |
-| Container Registry | `procuroacr` | Image tags: `pls-build10` |
+| Container Registry | `procuroacr` | Image tags: `db12a` (latest) |
 | Health Check | — | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/health |
 
 **Container App Resources:**
@@ -384,6 +384,8 @@ az containerapp update -n procuro-licence-admin -g procuro-production --image pr
 | 08 | 30 March 2026 | pls-build08 | pls-build08 | Pre-provisioning brief — "Prepare Azure Setup" generates resource summary + Azure CLI script per customer (SaaS/Hybrid). Copy-to-clipboard and print. |
 | 09 | 30 March 2026 | pls-build09 | pls-build09 | Fix provisioning — express-async-errors, wizard form preservation (display:none), per-step validation, Container App URL optional, better POST error messages. |
 | 10 | 30 March 2026 | pls-build10 | pls-build10 | Deployment lifecycle — V5 build ID tracking (v5BuildId field), setup scripts drawer, provision upgrade modal (backend+frontend), status column shows build number, Actions dropdown menu, GitHub link, correct V5 image names (procurov5-backend/frontend), uniqueness constraints on containerAppName/customDomain/databaseName+host. DB migration: 20260330_add_v5_build_id. |
+| 11 | 30 March 2026 | db1j | db1j | Frontend container support — frontendAppName + frontendAppUrl fields on deployments, auto-generated UUID/JWT in scripts, tenant config blank screen fix, customer acronym field (immutable). DB migrations: 20260330_add_frontend_container_fields, 20260330_add_customer_acronym. |
+| 12 | 30 March 2026 | db12a | db12a | Workflow redesign — Prepare Azure Setup is primary provisioning flow (creates deployment + generates scripts). Licence integration: auto-fetches active licence + HMAC secret. 3-step wizard: select customer → configure resources → scripts. Script-secrets and active-licence API endpoints. Edit Deployment moved to row Actions dropdown. |
 
 ### Local Development
 

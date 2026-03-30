@@ -47,6 +47,11 @@ export default function InstancesPage() {
       ellipsis: true,
       render: (v: string) => <Text copyable={{ text: v }}>{v.substring(0, 8)}...</Text>,
     },
+    {
+      title: 'Deployment',
+      key: 'deployment',
+      render: (_: unknown, r: Instance) => r.deployment?.deploymentLabel ?? <Text type="secondary">Not linked</Text>,
+    },
     { title: 'Software Version', dataIndex: 'softwareVersion', key: 'softwareVersion' },
     { title: 'Active Users', dataIndex: 'activeUsers', key: 'activeUsers' },
     {
