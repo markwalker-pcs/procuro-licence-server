@@ -104,6 +104,29 @@ router.post('/check-in', async (req: Request, res: Response) => {
       },
     });
 
+    // 4b. Auto-link instance to deployment if not already linked
+    if (!instance.deploymentId) {
+      try {
+        const matchingDeployment = await prisma.deployment.findFirst({
+          where: { expectedInstanceUuid: payload.instanceId },
+          select: { id: true },
+        });
+        if (matchingDeployment) {
+          await prisma.instance.update({
+            where: { id: instance.id },
+            data: { deploymentId: matchingDeployment.id },
+          });
+          logger.info('Auto-linked instance to deployment', {
+            instanceId: payload.instanceId,
+            deploymentId: matchingDeployment.id,
+          });
+        }
+      } catch (linkErr) {
+        // Non-fatal — log and continue
+        logger.warn('Failed to auto-link instance to deployment', { error: linkErr });
+      }
+    }
+
     // 5. Log the check-in to audit trail
     await prisma.checkIn.create({
       data: {

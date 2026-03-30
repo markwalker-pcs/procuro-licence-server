@@ -162,6 +162,7 @@ export interface Deployment {
   containerAppUrl: string | null;
   frontendAppName: string | null;
   frontendAppUrl: string | null;
+  expectedInstanceUuid: string | null;
   imageTag: string | null;
   v5BuildId: string | null;
   customDomain: string | null;

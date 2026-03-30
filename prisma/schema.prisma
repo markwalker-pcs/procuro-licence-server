@@ -54,6 +54,7 @@ model Deployment {
   // Application configuration — Frontend container
   frontendAppName   String?          // Azure Container App name, e.g. "procuro-acme-frontend"
   frontendAppUrl    String?          // Full URL, e.g. "https://procuro-acme-frontend.grayriver-3c973afe.uksouth.azurecontainerapps.io"
+  expectedInstanceUuid String?        // Pre-generated UUID assigned during provisioning — matched on first check-in
   imageTag          String?          // Current deployed ACR image tag, e.g. "build25"
   v5BuildId         String?          // Pro-curo V5 application build ID, e.g. "PCSv5-20260326-1925-25"
   customDomain      String?          // Custom domain — points to frontend container

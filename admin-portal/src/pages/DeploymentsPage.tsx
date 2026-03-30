@@ -147,6 +147,7 @@ export default function DeploymentsPage() {
   const [briefLicence, setBriefLicence] = useState<any>(null);
   const [briefLicenceWarning, setBriefLicenceWarning] = useState<string | null>(null);
   const [briefScriptSecrets, setBriefScriptSecrets] = useState<{ hmacSecret: string; licenceServerUrl: string } | null>(null);
+  const [briefInstanceUuid, setBriefInstanceUuid] = useState<string>('');
 
   // Setup scripts state (post-provisioning)
   const [setupDrawerOpen, setSetupDrawerOpen] = useState(false);
@@ -599,6 +600,9 @@ export default function DeploymentsPage() {
       setBriefType(isSaas ? 'SAAS' : 'HYBRID');
       const acronym = customer.customerAcronym || generateAcronym(customer.name);
       setBriefAcronym(acronym);
+      // Pre-generate instance UUID — stored on deployment record and baked into the script
+      const instanceUuid = crypto.randomUUID();
+      setBriefInstanceUuid(instanceUuid);
 
       // Pre-populate editable resource names
       briefForm.setFieldsValue({
@@ -653,6 +657,7 @@ export default function DeploymentsPage() {
         deploymentLabel: values.deploymentLabel,
         containerAppName: values.containerAppName,
         frontendAppName: values.frontendAppName,
+        expectedInstanceUuid: briefInstanceUuid || undefined,
         customDomain: values.customDomain,
         databaseName: values.databaseName,
         databaseType: values.databaseType || 'POSTGRESQL',
@@ -707,6 +712,7 @@ export default function DeploymentsPage() {
     lines.push(`# Frontend URL:         ${frontendUrl}`);
     lines.push(`# V5 Build ID:          ${LATEST_V5_BUILD_ID}`);
     lines.push(`# ACR Image Tag:        ${LATEST_V5_IMAGE_TAG}`);
+    lines.push(`# Instance UUID:        ${briefInstanceUuid}`);
     lines.push('');
 
     if (isSaas) {
@@ -759,9 +765,9 @@ export default function DeploymentsPage() {
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push('');
       lines.push(`JWT_SECRET=$(openssl rand -hex 32)`);
-      lines.push(`LICENCE_INSTANCE_ID=$(uuidgen)`);
+      lines.push(`LICENCE_INSTANCE_ID="${briefInstanceUuid}"`);
       lines.push(`echo "Generated JWT_SECRET:          $JWT_SECRET"`);
-      lines.push(`echo "Generated LICENCE_INSTANCE_ID: $LICENCE_INSTANCE_ID"`);
+      lines.push(`echo "LICENCE_INSTANCE_ID (pre-assigned): $LICENCE_INSTANCE_ID"`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push(`# STEP 4: Set Backend Environment Variables`);
@@ -886,9 +892,9 @@ export default function DeploymentsPage() {
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push('');
       lines.push(`JWT_SECRET=$(openssl rand -hex 32)`);
-      lines.push(`LICENCE_INSTANCE_ID=$(uuidgen)`);
+      lines.push(`LICENCE_INSTANCE_ID="${briefInstanceUuid}"`);
       lines.push(`echo "Generated JWT_SECRET:          $JWT_SECRET"`);
-      lines.push(`echo "Generated LICENCE_INSTANCE_ID: $LICENCE_INSTANCE_ID"`);
+      lines.push(`echo "LICENCE_INSTANCE_ID (pre-assigned): $LICENCE_INSTANCE_ID"`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push(`# STEP 4: Set Environment Variables (once connectivity confirmed)`);
@@ -1010,6 +1016,7 @@ export default function DeploymentsPage() {
     lines.push(`# Frontend URL:       ${frontendUrl}`);
     lines.push(`# V5 Build ID:        ${deployment.v5BuildId || LATEST_V5_BUILD_ID}`);
     lines.push(`# ACR Image Tag:      ${deployment.imageTag || LATEST_V5_IMAGE_TAG}`);
+    lines.push(`# Instance UUID:      ${deployment.expectedInstanceUuid || 'not set'}`);
     lines.push(`# Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
     lines.push(`# ═══════════════════════════════════════════════════════════════════`);
     lines.push('');
@@ -1017,9 +1024,9 @@ export default function DeploymentsPage() {
     lines.push(`# ─── STEP 1: Generate Secrets ──────────────────────────────────────`);
     lines.push('');
     lines.push(`JWT_SECRET=$(openssl rand -hex 32)`);
-    lines.push(`LICENCE_INSTANCE_ID=$(uuidgen)`);
+    lines.push(`LICENCE_INSTANCE_ID="${deployment.expectedInstanceUuid || crypto.randomUUID()}"`);
     lines.push(`echo "Generated JWT_SECRET:          $JWT_SECRET"`);
-    lines.push(`echo "Generated LICENCE_INSTANCE_ID: $LICENCE_INSTANCE_ID"`);
+    lines.push(`echo "LICENCE_INSTANCE_ID (pre-assigned): $LICENCE_INSTANCE_ID"`);
     lines.push('');
 
     lines.push(`# ─── STEP 2: Set Backend Environment Variables ─────────────────────`);
@@ -2605,6 +2612,11 @@ export default function DeploymentsPage() {
                 <Input placeholder={LATEST_V5_BUILD_ID} />
               </Form.Item>
             </div>
+            {briefInstanceUuid && (
+              <Form.Item label="Instance UUID" extra="Pre-generated — will be matched when the V5 instance first checks in">
+                <Input value={briefInstanceUuid} disabled />
+              </Form.Item>
+            )}
           </Form>
         </div>
 
