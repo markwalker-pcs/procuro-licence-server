@@ -153,6 +153,7 @@ export interface Deployment {
   containerAppName: string | null;
   containerAppUrl: string | null;
   imageTag: string | null;
+  v5BuildId: string | null;
   customDomain: string | null;
   sslCertExpiry: string | null;
   databaseType: DatabaseType;

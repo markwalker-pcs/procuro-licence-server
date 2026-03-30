@@ -3,16 +3,16 @@
 > **Owner:** Pro-curo Software Limited
 > **Repository:** https://github.com/markwalker-pcs/procuro-licence-server.git
 > **Architecture Document:** `Pro-curo V5 - Licensing Server Technical Architecture.docx`
-> **Last Updated:** 27 March 2026
+> **Last Updated:** 30 March 2026
 
 ---
 
 ## Current Status
 
 **Phase:** Phases 1–6 complete, deployed to Azure
-**Current Build:** PLS-20260327-1000-07
+**Current Build:** PLS-20260330-1200-10
 **Build Status:** Docker build passing, server running on Azure Container Apps
-**Deployed:** Yes — Azure Container Apps (UK South), Build 07 deployed 27 March 2026
+**Deployed:** Yes — Azure Container Apps (UK South), Build 10 deployed 30 March 2026
 **First Successful Build:** 26 March 2026 — health endpoint confirmed at http://localhost:3100/health
 
 ---
@@ -260,6 +260,8 @@ See `.env.example` for full list. Key variables:
 | PLS-20260327-build05 | 27 March 2026 | Phase 5 — Password auth (bcrypt) for admin portal, customer editing (PATCH + edit modal), deployment model change audit logging, NODE_ENV set to production |
 | PLS-20260327-build06 | 27 March 2026 | Phase 6 — Deployments page (provisioning workflow, 4-step wizard), Tenant Configuration store (per-deployment key-value config, env vars, feature flags, quick-add templates, secret masking), custom domain + SSL cert tracking. TS fixes: adminUser guard, Tag color prop, form value casts, Typography.Title. |
 | PLS-20260327-1000-07 | 27 March 2026 | Smart provisioning wizard — auto-populate from customer deployment model (SaaS/Hybrid), acronym-based naming (database, domain, container app), latest image tag default, custom domain in table + edit modal, seed passwordHash fix for existing users. |
+| PLS-20260327-1457-08 | 30 March 2026 | Pre-provisioning brief — "Prepare Azure Setup" feature generates resource summary and Azure CLI script (database, container app, env vars, custom domain, migration) per customer. Copy-to-clipboard and print support. SaaS and Hybrid script variants. |
+| PLS-20260330-0700-09 | 30 March 2026 | Fix provisioning — added express-async-errors (Express 4 async handler bug), wizard form values now preserved across steps (display:none instead of unmount), per-step field validation, Container App URL made optional, better error messages on POST failures. |
 
 ---
 
@@ -328,7 +330,7 @@ See `.env.example` for full list. Key variables:
 | Licence Server API | `procuro-licence-server` | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
 | Admin Portal | `procuro-licence-admin` | https://procuro-licence-admin.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
 | Database | `procuro_licence` on `procuro-db` | Same Azure PostgreSQL server as V5 |
-| Container Registry | `procuroacr` | Image tags: `pls-build07` |
+| Container Registry | `procuroacr` | Image tags: `pls-build10` |
 | Health Check | — | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/health |
 
 **Container App Resources:**
@@ -376,6 +378,9 @@ az containerapp update -n procuro-licence-admin -g procuro-production --image pr
 | 05 | 27 March 2026 | pls-build05 | pls-build05 | Password auth for admin portal (bcrypt), customer editing (PATCH endpoint + edit modal), deployment model change audit logging, NODE_ENV set to production. |
 | 06 | 27 March 2026 | pls-build06 | pls-build06 | Deployments page (4-step provisioning wizard), Tenant Configuration store (key-value config, secret masking, quick-add templates), custom domain/SSL tracking, TS build fixes. |
 | 07 | 27 March 2026 | pls-build07 | pls-build07 | Smart provisioning wizard (auto-populate from customer deployment model), acronym naming, latest image tag default, seed passwordHash fix. Admin login now works. |
+| 08 | 30 March 2026 | pls-build08 | pls-build08 | Pre-provisioning brief — "Prepare Azure Setup" generates resource summary + Azure CLI script per customer (SaaS/Hybrid). Copy-to-clipboard and print. |
+| 09 | 30 March 2026 | pls-build09 | pls-build09 | Fix provisioning — express-async-errors, wizard form preservation (display:none), per-step validation, Container App URL optional, better POST error messages. |
+| 10 | 30 March 2026 | pls-build10 | pls-build10 | Deployment lifecycle — V5 build ID tracking (v5BuildId field), setup scripts drawer, provision upgrade modal (backend+frontend), status column shows build number, Actions dropdown menu, GitHub link, correct V5 image names (procurov5-backend/frontend), uniqueness constraints on containerAppName/customDomain/databaseName+host. DB migration: 20260330_add_v5_build_id. |
 
 ### Local Development
 

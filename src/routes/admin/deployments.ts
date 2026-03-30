@@ -73,6 +73,7 @@ const createDeploymentSchema = z.object({
   containerAppName: z.string().optional(),
   containerAppUrl: z.string().optional(),
   imageTag: z.string().optional(),
+  v5BuildId: z.string().optional(),
   customDomain: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -98,6 +99,7 @@ router.post('/', async (req: AdminAuthRequest, res: Response) => {
         containerAppName: data.containerAppName || null,
         containerAppUrl: data.containerAppUrl || null,
         imageTag: data.imageTag || null,
+        v5BuildId: data.v5BuildId || null,
         customDomain: data.customDomain || null,
         notes: data.notes || null,
         provisionedBy: req.adminUser.id,
@@ -149,7 +151,16 @@ router.post('/', async (req: AdminAuthRequest, res: Response) => {
 
     // Prisma unique constraint or foreign key errors
     if (err.code === 'P2002') {
-      res.status(409).json({ error: 'A deployment with these details already exists' });
+      const target = err.meta?.target as string[] | undefined;
+      let detail = 'A deployment with these details already exists';
+      if (target?.includes('containerAppName')) {
+        detail = 'A deployment with this Container App name already exists';
+      } else if (target?.includes('customDomain')) {
+        detail = 'A deployment with this custom domain already exists';
+      } else if (target?.includes('databaseName')) {
+        detail = 'A deployment with this database name and host combination already exists';
+      }
+      res.status(409).json({ error: detail });
       return;
     }
     if (err.code === 'P2003') {
@@ -177,6 +188,7 @@ const updateDeploymentSchema = z.object({
   containerAppName: z.string().optional().nullable(),
   containerAppUrl: z.string().optional().nullable(),
   imageTag: z.string().optional().nullable(),
+  v5BuildId: z.string().optional().nullable(),
   customDomain: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
@@ -196,20 +208,38 @@ router.patch('/:id', async (req: AdminAuthRequest, res: Response) => {
   }
 
   // Update deployment
-  const updatedDeployment = await prisma.deployment.update({
-    where: { id },
-    data: updates as any,
-    include: {
-      customer: {
-        select: {
-          id: true,
-          name: true,
-          customerNumber: true,
-          deploymentModel: true,
+  let updatedDeployment;
+  try {
+    updatedDeployment = await prisma.deployment.update({
+      where: { id },
+      data: updates as any,
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            customerNumber: true,
+            deploymentModel: true,
+          },
         },
       },
-    },
-  });
+    });
+  } catch (err: any) {
+    if (err.code === 'P2002') {
+      const target = err.meta?.target as string[] | undefined;
+      let detail = 'A deployment with these details already exists';
+      if (target?.includes('containerAppName')) {
+        detail = 'A deployment with this Container App name already exists';
+      } else if (target?.includes('customDomain')) {
+        detail = 'A deployment with this custom domain already exists';
+      } else if (target?.includes('databaseName')) {
+        detail = 'A deployment with this database name and host combination already exists';
+      }
+      res.status(409).json({ error: detail });
+      return;
+    }
+    throw err;
+  }
 
   // Build details object for audit log (only changed fields)
   const changedFields: Record<string, unknown> = {};
@@ -299,6 +329,13 @@ router.patch('/:id', async (req: AdminAuthRequest, res: Response) => {
     changedFields.imageTag = {
       old: existingDeployment.imageTag,
       new: updates.imageTag,
+    };
+    hasChanges = true;
+  }
+  if (updates.v5BuildId !== undefined && updates.v5BuildId !== existingDeployment.v5BuildId) {
+    changedFields.v5BuildId = {
+      old: existingDeployment.v5BuildId,
+      new: updates.v5BuildId,
     };
     hasChanges = true;
   }

@@ -4,7 +4,7 @@ import {
   Card, Steps, Descriptions, Popconfirm, Drawer, Collapse, DatePicker, Checkbox, Tooltip,
   Dropdown, Alert,
 } from 'antd';
-import { PlusOutlined, EditOutlined, RocketOutlined, SettingOutlined, DeleteOutlined, CopyOutlined, DownOutlined, CloudOutlined, HomeOutlined, FileTextOutlined, PrinterOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, RocketOutlined, SettingOutlined, DeleteOutlined, CopyOutlined, DownOutlined, CloudOutlined, HomeOutlined, FileTextOutlined, PrinterOutlined, CodeOutlined, ArrowUpOutlined, PauseCircleOutlined, StopOutlined, PlayCircleOutlined, GithubOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../services/api';
 import type { Customer, Deployment, DatabaseType, ConnectivityType, DeploymentStatus, TenantConfig } from '../types';
@@ -12,10 +12,17 @@ import type { Customer, Deployment, DatabaseType, ConnectivityType, DeploymentSt
 const { Title, Text } = Typography;
 
 const statusColours: Record<DeploymentStatus, string> = {
-  PROVISIONING: 'blue',
+  PROVISIONING: 'gold',
   ACTIVE: 'green',
   SUSPENDED: 'orange',
   DECOMMISSIONED: 'default',
+};
+
+const statusLabels: Record<DeploymentStatus, string> = {
+  PROVISIONING: 'Pending Setup',
+  ACTIVE: 'Running',
+  SUSPENDED: 'Suspended',
+  DECOMMISSIONED: 'Decommissioned',
 };
 
 const databaseTypeLabels: Record<DatabaseType, string> = {
@@ -50,14 +57,21 @@ const SAAS_DEFAULTS = {
 // Azure Container Apps environment suffix — same for all apps in procuro-env
 const AZURE_ENV_SUFFIX = 'grayriver-3c973afe.uksouth.azurecontainerapps.io';
 
-// Latest deployed image tag — update with each release
-const LATEST_IMAGE_TAG = 'pls-build08';
+// Latest deployed V5 application image tag — update with each release
+const LATEST_V5_IMAGE_TAG = 'build25';
+
+// Pro-curo V5 GitHub repository
+const V5_GITHUB_URL = 'https://github.com/markwalker-pcs/procuro-v5';
 
 // Azure Container Registry
 const ACR_SERVER = 'procuroacr-eshnbwa0fvfshzg0.azurecr.io';
 const RESOURCE_GROUP = 'procuro-production';
 const CONTAINER_ENV = 'procuro-env';
 const DB_SERVER_NAME = 'procuro-db';
+
+// V5 application image names in ACR
+const V5_BACKEND_IMAGE = 'procurov5-backend';
+const V5_FRONTEND_IMAGE = 'procurov5-frontend';
 
 /**
  * Generate an acronym from a company/organisation name.
@@ -125,6 +139,17 @@ export default function DeploymentsPage() {
   const [briefCustomer, setBriefCustomer] = useState<Customer | null>(null);
   const [briefAcronym, setBriefAcronym] = useState('');
   const [briefType, setBriefType] = useState<'SAAS' | 'HYBRID' | null>(null);
+
+  // Setup scripts state (post-provisioning)
+  const [setupDrawerOpen, setSetupDrawerOpen] = useState(false);
+  const [setupDeployment, setSetupDeployment] = useState<Deployment | null>(null);
+
+  // Upgrade state
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeDeployment, setUpgradeDeployment] = useState<Deployment | null>(null);
+  const [upgradeImageTag, setUpgradeImageTag] = useState('');
+  const [upgradeV5BuildId, setUpgradeV5BuildId] = useState('');
+  const [upgradeSubmitting, setUpgradeSubmitting] = useState(false);
 
   const fetchDeployments = async () => {
     setLoading(true);
@@ -196,7 +221,7 @@ export default function DeploymentsPage() {
           containerAppName: appName,
           containerAppUrl: '',
           customDomain: acronym ? `${acronym}.app.pro-curo.com` : '',
-          imageTag: LATEST_IMAGE_TAG,
+          imageTag: LATEST_V5_IMAGE_TAG,
         });
       } else {
         // Hybrid / On-Premises — suggest naming but leave DB config blank
@@ -210,7 +235,7 @@ export default function DeploymentsPage() {
           containerAppName: appName,
           containerAppUrl: '',
           customDomain: acronym ? `${acronym}.app.pro-curo.com` : '',
-          imageTag: LATEST_IMAGE_TAG,
+          imageTag: LATEST_V5_IMAGE_TAG,
         });
       }
     }
@@ -220,7 +245,7 @@ export default function DeploymentsPage() {
   const createStepFields: string[][] = [
     ['customerId'],
     ['databaseType', 'databaseHost', 'databasePort', 'databaseName', 'connectivityType'],
-    ['deploymentLabel', 'containerAppName', 'customDomain', 'containerAppUrl', 'imageTag', 'notes'],
+    ['deploymentLabel', 'containerAppName', 'customDomain', 'containerAppUrl', 'imageTag', 'v5BuildId', 'notes'],
     [], // Review step — no validation needed
   ];
 
@@ -273,6 +298,7 @@ export default function DeploymentsPage() {
       customDomain: deployment.customDomain,
       containerAppUrl: deployment.containerAppUrl,
       imageTag: deployment.imageTag,
+      v5BuildId: deployment.v5BuildId,
       notes: deployment.notes,
     });
     setEditModalOpen(true);
@@ -281,7 +307,7 @@ export default function DeploymentsPage() {
   const editStepFields: string[][] = [
     ['customerId'],
     ['databaseType', 'databaseHost', 'databasePort', 'databaseName', 'connectivityType'],
-    ['deploymentLabel', 'containerAppName', 'customDomain', 'containerAppUrl', 'imageTag', 'notes'],
+    ['deploymentLabel', 'containerAppName', 'customDomain', 'containerAppUrl', 'imageTag', 'v5BuildId', 'notes'],
     [],
   ];
 
@@ -571,7 +597,7 @@ export default function DeploymentsPage() {
     lines.push(`# Container App:      ${appName}`);
     lines.push(`# Custom Domain:      ${domain}`);
     lines.push(`# Container App URL:  ${appUrl}`);
-    lines.push(`# Image Tag:          ${LATEST_IMAGE_TAG}`);
+    lines.push(`# Image Tag:          ${LATEST_V5_IMAGE_TAG}`);
     lines.push('');
 
     if (isSaas) {
@@ -585,14 +611,14 @@ export default function DeploymentsPage() {
       lines.push(`  --database-name ${dbName}`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# STEP 2: Create the Container App`);
+      lines.push(`# STEP 2: Create the Backend Container App`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push('');
       lines.push(`az containerapp create \\`);
       lines.push(`  --name ${appName} \\`);
       lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
       lines.push(`  --environment ${CONTAINER_ENV} \\`);
-      lines.push(`  --image ${ACR_SERVER}/procuro-v5-backend:${LATEST_IMAGE_TAG} \\`);
+      lines.push(`  --image ${ACR_SERVER}/${V5_BACKEND_IMAGE}:${LATEST_V5_IMAGE_TAG} \\`);
       lines.push(`  --registry-server ${ACR_SERVER} \\`);
       lines.push(`  --registry-username procuroacr \\`);
       lines.push(`  --registry-password <ACR_PASSWORD> \\`);
@@ -602,7 +628,25 @@ export default function DeploymentsPage() {
       lines.push(`  --cpu 0.5 --memory 1Gi`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# STEP 3: Set Environment Variables`);
+      lines.push(`# STEP 2b: Create the Frontend Container App`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push('');
+      lines.push(`az containerapp create \\`);
+      lines.push(`  --name ${appName.replace('-backend', '-frontend')} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --environment ${CONTAINER_ENV} \\`);
+      lines.push(`  --image ${ACR_SERVER}/${V5_FRONTEND_IMAGE}:${LATEST_V5_IMAGE_TAG} \\`);
+      lines.push(`  --registry-server ${ACR_SERVER} \\`);
+      lines.push(`  --registry-username procuroacr \\`);
+      lines.push(`  --registry-password <ACR_PASSWORD> \\`);
+      lines.push(`  --target-port 80 \\`);
+      lines.push(`  --ingress external \\`);
+      lines.push(`  --min-replicas 1 --max-replicas 1 \\`);
+      lines.push(`  --cpu 0.25 --memory 0.5Gi \\`);
+      lines.push(`  --env-vars BACKEND_URL="https://${appName}.${AZURE_ENV_SUFFIX}"`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 3: Set Backend Environment Variables`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push(`# Generate secrets first:`);
       lines.push(`#   JWT_SECRET:         openssl rand -hex 32`);
@@ -671,14 +715,14 @@ export default function DeploymentsPage() {
       lines.push(`# See DOC-024 (Hybrid Deployment Technical Reference) for details.`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# STEP 1: Create the Container App (on our Azure)`);
+      lines.push(`# STEP 1: Create the Backend Container App (on our Azure)`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push('');
       lines.push(`az containerapp create \\`);
       lines.push(`  --name ${appName} \\`);
       lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
       lines.push(`  --environment ${CONTAINER_ENV} \\`);
-      lines.push(`  --image ${ACR_SERVER}/procuro-v5-backend:${LATEST_IMAGE_TAG} \\`);
+      lines.push(`  --image ${ACR_SERVER}/${V5_BACKEND_IMAGE}:${LATEST_V5_IMAGE_TAG} \\`);
       lines.push(`  --registry-server ${ACR_SERVER} \\`);
       lines.push(`  --registry-username procuroacr \\`);
       lines.push(`  --registry-password <ACR_PASSWORD> \\`);
@@ -686,6 +730,24 @@ export default function DeploymentsPage() {
       lines.push(`  --ingress external \\`);
       lines.push(`  --min-replicas 1 --max-replicas 1 \\`);
       lines.push(`  --cpu 0.5 --memory 1Gi`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 1b: Create the Frontend Container App`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push('');
+      lines.push(`az containerapp create \\`);
+      lines.push(`  --name ${appName.replace('-backend', '-frontend')} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --environment ${CONTAINER_ENV} \\`);
+      lines.push(`  --image ${ACR_SERVER}/${V5_FRONTEND_IMAGE}:${LATEST_V5_IMAGE_TAG} \\`);
+      lines.push(`  --registry-server ${ACR_SERVER} \\`);
+      lines.push(`  --registry-username procuroacr \\`);
+      lines.push(`  --registry-password <ACR_PASSWORD> \\`);
+      lines.push(`  --target-port 80 \\`);
+      lines.push(`  --ingress external \\`);
+      lines.push(`  --min-replicas 1 --max-replicas 1 \\`);
+      lines.push(`  --cpu 0.25 --memory 0.5Gi \\`);
+      lines.push(`  --env-vars BACKEND_URL="https://${appName}.${AZURE_ENV_SUFFIX}"`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push(`# STEP 2: Verify Connectivity to Client Database`);
@@ -785,6 +847,193 @@ export default function DeploymentsPage() {
     }
   };
 
+  // ─── Setup Scripts Generator (post-provisioning) ───
+  const generateSetupScript = (deployment: Deployment): string => {
+    const lines: string[] = [];
+    const appName = deployment.containerAppName || 'procuro-UNKNOWN-backend';
+    const dbName = deployment.databaseName || 'UNKNOWN_procuro';
+    const domain = deployment.customDomain || 'UNKNOWN.app.pro-curo.com';
+    const dbHost = deployment.databaseHost || 'procuro-db.postgres.database.azure.com';
+    const isSaas = deployment.customer?.deploymentModel === 'SAAS';
+
+    lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+    lines.push(`# PRO-CURO V5 — Post-Provisioning Setup Script`);
+    lines.push(`# Customer: ${deployment.customer?.name || 'Unknown'}`);
+    lines.push(`# Deployment: ${deployment.deploymentLabel}`);
+    lines.push(`# Container App: ${appName}`);
+    lines.push(`# Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
+    lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+    lines.push('');
+
+    lines.push(`# ─── STEP 1: Set Environment Variables ─────────────────────────────`);
+    lines.push(`# Generate secrets first:`);
+    lines.push(`#   JWT_SECRET:          openssl rand -hex 32`);
+    lines.push(`#   LICENCE_INSTANCE_ID: uuidgen`);
+    lines.push('');
+
+    if (isSaas) {
+      lines.push(`az containerapp update \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --set-env-vars \\`);
+      lines.push(`    DATABASE_URL="postgresql://<USER>:<PASSWORD>@${dbHost}:${deployment.databasePort || 5432}/${dbName}?sslmode=require" \\`);
+      lines.push(`    NODE_ENV=production \\`);
+      lines.push(`    PORT=3100 \\`);
+      lines.push(`    JWT_SECRET="<GENERATED_JWT_SECRET>" \\`);
+      lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
+      lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
+      lines.push(`    LICENCE_KEY="<FROM_LICENCE_SERVER>" \\`);
+      lines.push(`    LICENCE_HMAC_SECRET="<FROM_LICENCE_SERVER>" \\`);
+      lines.push(`    LICENCE_INSTANCE_ID="<GENERATED_UUID>" \\`);
+      lines.push(`    LICENCE_ENABLED=true`);
+    } else {
+      lines.push(`az containerapp update \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --set-env-vars \\`);
+      lines.push(`    DATABASE_URL="<CLIENT_DATABASE_URL>" \\`);
+      lines.push(`    NODE_ENV=production \\`);
+      lines.push(`    PORT=3100 \\`);
+      lines.push(`    JWT_SECRET="<GENERATED_JWT_SECRET>" \\`);
+      lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
+      lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
+      lines.push(`    LICENCE_KEY="<FROM_LICENCE_SERVER>" \\`);
+      lines.push(`    LICENCE_HMAC_SECRET="<FROM_LICENCE_SERVER>" \\`);
+      lines.push(`    LICENCE_INSTANCE_ID="<GENERATED_UUID>" \\`);
+      lines.push(`    LICENCE_ENABLED=true`);
+    }
+
+    lines.push('');
+    lines.push(`# ─── STEP 2: Run Database Migration ────────────────────────────────`);
+    lines.push('');
+    lines.push(`az containerapp exec \\`);
+    lines.push(`  --name ${appName} \\`);
+    lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+    lines.push(`  --command "npx prisma migrate deploy"`);
+
+    lines.push('');
+    lines.push(`# ─── STEP 3: Verify Deployment ─────────────────────────────────────`);
+    lines.push('');
+    if (deployment.containerAppUrl) {
+      lines.push(`# Health check:`);
+      lines.push(`curl -s ${deployment.containerAppUrl}/api/health | jq .`);
+    } else {
+      lines.push(`# Health check (replace with actual Container App URL):`);
+      lines.push(`curl -s https://${appName}.${AZURE_ENV_SUFFIX}/api/health | jq .`);
+    }
+    if (domain) {
+      lines.push('');
+      lines.push(`# Custom domain check:`);
+      lines.push(`curl -s https://${domain}/api/health | jq .`);
+    }
+
+    lines.push('');
+    lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+    lines.push(`# Once verified, return to the Admin Portal and mark as Active.`);
+    lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+
+    return lines.join('\n');
+  };
+
+  const handleCopySetupScript = (deployment: Deployment) => {
+    const script = generateSetupScript(deployment);
+    navigator.clipboard.writeText(script).then(() => {
+      message.success('Setup script copied to clipboard');
+    }).catch(() => {
+      message.error('Failed to copy — please select and copy manually');
+    });
+  };
+
+  // ─── Upgrade Script Generator ───
+  const generateUpgradeScript = (deployment: Deployment, newTag: string): string => {
+    const appName = deployment.containerAppName || 'procuro-UNKNOWN-backend';
+    const lines: string[] = [];
+
+    lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+    lines.push(`# PRO-CURO V5 — Upgrade Script`);
+    lines.push(`# Customer: ${deployment.customer?.name || 'Unknown'}`);
+    lines.push(`# Deployment: ${deployment.deploymentLabel}`);
+    lines.push(`# Upgrading: ${deployment.imageTag || 'unknown'} → ${newTag}`);
+    lines.push(`# Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
+    lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+    lines.push('');
+
+    const frontendAppName = appName.replace('-backend', '-frontend');
+
+    lines.push(`# ─── STEP 1: Build Updated Images in ACR ───────────────────────────`);
+    lines.push(`# Run from Azure Cloud Shell after pulling latest source`);
+    lines.push('');
+    lines.push(`cd ~/procuro-v5/v5-source`);
+    lines.push(`git pull`);
+    lines.push('');
+    lines.push(`az acr build --registry procuroacr --image ${V5_BACKEND_IMAGE}:${newTag} --file backend/Dockerfile ./backend`);
+    lines.push(`az acr build --registry procuroacr --image ${V5_FRONTEND_IMAGE}:${newTag} --file frontend/Dockerfile ./frontend`);
+
+    lines.push('');
+    lines.push(`# ─── STEP 2: Update Container Apps ─────────────────────────────────`);
+    lines.push('');
+    lines.push(`az containerapp update \\`);
+    lines.push(`  --name ${appName} \\`);
+    lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+    lines.push(`  --image ${ACR_SERVER}/${V5_BACKEND_IMAGE}:${newTag}`);
+    lines.push('');
+    lines.push(`az containerapp update \\`);
+    lines.push(`  --name ${frontendAppName} \\`);
+    lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+    lines.push(`  --image ${ACR_SERVER}/${V5_FRONTEND_IMAGE}:${newTag}`);
+
+    lines.push('');
+    lines.push(`# ─── STEP 3: Run Database Migration (if schema changes) ─────────────`);
+    lines.push('');
+    lines.push(`az containerapp exec \\`);
+    lines.push(`  --name ${appName} \\`);
+    lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+    lines.push(`  --command "npx prisma migrate deploy"`);
+
+    lines.push('');
+    lines.push(`# ─── STEP 4: Verify Upgrade ─────────────────────────────────────────`);
+    lines.push('');
+    if (deployment.containerAppUrl) {
+      lines.push(`curl -s ${deployment.containerAppUrl}/api/health | jq .`);
+    } else {
+      lines.push(`curl -s https://${appName}.${AZURE_ENV_SUFFIX}/api/health | jq .`);
+    }
+    lines.push(`# Confirm the build ID shows: PCSv5 build matching ${newTag}`);
+
+    lines.push('');
+    lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+    lines.push(`# Once verified, the deployment record has been updated automatically.`);
+    lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+
+    return lines.join('\n');
+  };
+
+  const handleUpgradeSubmit = async () => {
+    if (!upgradeDeployment || !upgradeImageTag) return;
+    setUpgradeSubmitting(true);
+    try {
+      const updateData: Record<string, string> = { imageTag: upgradeImageTag };
+      if (upgradeV5BuildId) {
+        updateData.v5BuildId = upgradeV5BuildId;
+      }
+      await api.patch(`/admin/deployments/${upgradeDeployment.id}`, updateData);
+
+      // Copy the upgrade script to clipboard
+      const script = generateUpgradeScript(upgradeDeployment, upgradeImageTag);
+      navigator.clipboard.writeText(script).then(() => {
+        message.success('Upgrade recorded and script copied to clipboard');
+      }).catch(() => {
+        message.success('Upgrade recorded — copy the script manually from below');
+      });
+
+      fetchDeployments();
+    } catch (err: any) {
+      message.error(err.response?.data?.error || 'Failed to record upgrade');
+    } finally {
+      setUpgradeSubmitting(false);
+    }
+  };
+
   const configCategories = [
     { key: 'env_var', label: 'Environment Variables' },
     { key: 'feature_flag', label: 'Feature Flags' },
@@ -867,12 +1116,21 @@ export default function DeploymentsPage() {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: (status: DeploymentStatus) => (
-        <Tag color={statusColours[status]}>{status}</Tag>
-      ),
+      render: (status: DeploymentStatus, record: Deployment) => {
+        if (status === 'ACTIVE' && (record.v5BuildId || record.imageTag)) {
+          return (
+            <Tooltip title={record.v5BuildId ? `Image: ${record.imageTag || '—'}` : 'Running'}>
+              <Tag color="green" icon={<PlayCircleOutlined />}>
+                {record.v5BuildId || record.imageTag}
+              </Tag>
+            </Tooltip>
+          );
+        }
+        return <Tag color={statusColours[status]}>{statusLabels[status]}</Tag>;
+      },
       filters: [
-        { text: 'Provisioning', value: 'PROVISIONING' },
-        { text: 'Active', value: 'ACTIVE' },
+        { text: 'Pending Setup', value: 'PROVISIONING' },
+        { text: 'Running', value: 'ACTIVE' },
         { text: 'Suspended', value: 'SUSPENDED' },
         { text: 'Decommissioned', value: 'DECOMMISSIONED' },
       ],
@@ -906,11 +1164,19 @@ export default function DeploymentsPage() {
       ),
     },
     {
-      title: 'Image Tag',
-      dataIndex: 'imageTag',
-      key: 'imageTag',
-      render: (tag: string | null) => (
-        tag ? <Text code style={{ fontSize: 12 }}>{tag}</Text> : <Text type="secondary">—</Text>
+      title: 'V5 Build',
+      key: 'v5BuildId',
+      render: (_: unknown, record: Deployment) => (
+        <div>
+          {record.v5BuildId ? (
+            <Text code style={{ fontSize: 12 }}>{record.v5BuildId}</Text>
+          ) : (
+            <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
+          )}
+          {record.imageTag && (
+            <div><Text type="secondary" style={{ fontSize: 11 }}>tag: {record.imageTag}</Text></div>
+          )}
+        </div>
       ),
     },
     {
@@ -923,61 +1189,116 @@ export default function DeploymentsPage() {
     {
       title: 'Action',
       key: 'action',
-      width: 140,
-      render: (_: unknown, record: Deployment) => (
-        <Space size="small">
-          <Button
-            type="text"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          />
-          <Button
-            type="text"
-            icon={<SettingOutlined />}
-            onClick={() => handleOpenConfigDrawer(record)}
-            title="Configure tenant"
-          />
-          <Popconfirm
-            title="Change Status"
-            description={
-              <div>
-                <div style={{ marginBottom: 8 }}>Select new status:</div>
-                <Button.Group>
-                  {record.status !== 'ACTIVE' && (
-                    <Button
-                      size="small"
-                      onClick={() => handleStatusChange(record.id, 'ACTIVE')}
-                      loading={statusChangeLoading === record.id}
-                    >
-                      Activate
-                    </Button>
-                  )}
-                  {record.status !== 'SUSPENDED' && (
-                    <Button
-                      size="small"
-                      onClick={() => handleStatusChange(record.id, 'SUSPENDED')}
-                      loading={statusChangeLoading === record.id}
-                    >
-                      Suspend
-                    </Button>
-                  )}
-                  {record.status !== 'DECOMMISSIONED' && (
-                    <Button
-                      size="small"
-                      onClick={() => handleStatusChange(record.id, 'DECOMMISSIONED')}
-                      loading={statusChangeLoading === record.id}
-                      danger
-                    >
-                      Decommission
-                    </Button>
-                  )}
-                </Button.Group>
-              </div>
-            }
-            onOpenChange={() => {}}
-          />
-        </Space>
-      ),
+      width: 220,
+      render: (_: unknown, record: Deployment) => {
+        const menuItems: any[] = [];
+
+        // Setup Scripts — available for PROVISIONING deployments
+        if (record.status === 'PROVISIONING') {
+          menuItems.push({
+            key: 'setup',
+            icon: <CodeOutlined />,
+            label: 'Setup Scripts',
+            onClick: () => {
+              setSetupDeployment(record);
+              setSetupDrawerOpen(true);
+            },
+          });
+          menuItems.push({
+            key: 'activate',
+            icon: <PlayCircleOutlined />,
+            label: 'Mark as Running',
+            onClick: () => handleStatusChange(record.id, 'ACTIVE'),
+          });
+        }
+
+        // Upgrade — available for ACTIVE deployments
+        if (record.status === 'ACTIVE') {
+          menuItems.push({
+            key: 'upgrade',
+            icon: <ArrowUpOutlined />,
+            label: 'Provision Upgrade',
+            onClick: () => {
+              setUpgradeDeployment(record);
+              setUpgradeImageTag('');
+              setUpgradeV5BuildId('');
+              setUpgradeModalOpen(true);
+            },
+          });
+          menuItems.push({
+            key: 'setup-active',
+            icon: <CodeOutlined />,
+            label: 'Setup Scripts',
+            onClick: () => {
+              setSetupDeployment(record);
+              setSetupDrawerOpen(true);
+            },
+          });
+          menuItems.push({
+            key: 'suspend',
+            icon: <PauseCircleOutlined />,
+            label: 'Suspend',
+            onClick: () => handleStatusChange(record.id, 'SUSPENDED'),
+          });
+        }
+
+        // Suspended — can reactivate or decommission
+        if (record.status === 'SUSPENDED') {
+          menuItems.push({
+            key: 'reactivate',
+            icon: <PlayCircleOutlined />,
+            label: 'Reactivate',
+            onClick: () => handleStatusChange(record.id, 'ACTIVE'),
+          });
+          menuItems.push({
+            key: 'decommission',
+            icon: <StopOutlined />,
+            label: 'Decommission',
+            danger: true,
+            onClick: () => handleStatusChange(record.id, 'DECOMMISSIONED'),
+          });
+        }
+
+        // Always available unless decommissioned
+        if (record.status !== 'DECOMMISSIONED') {
+          menuItems.push({ type: 'divider' });
+          menuItems.push({
+            key: 'decommission-final',
+            icon: <StopOutlined />,
+            label: 'Decommission',
+            danger: true,
+            onClick: () => handleStatusChange(record.id, 'DECOMMISSIONED'),
+          });
+        }
+
+        return (
+          <Space size="small">
+            <Button
+              type="text"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              title="Edit deployment"
+            />
+            <Button
+              type="text"
+              icon={<SettingOutlined />}
+              onClick={() => handleOpenConfigDrawer(record)}
+              title="Tenant configuration"
+            />
+            <Dropdown
+              menu={{ items: menuItems }}
+              trigger={['click']}
+            >
+              <Button
+                type="text"
+                loading={statusChangeLoading === record.id}
+              >
+                Actions <DownOutlined />
+              </Button>
+            </Dropdown>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -1108,8 +1429,11 @@ export default function DeploymentsPage() {
           >
             <Input placeholder={customerAcronym ? `e.g. https://procuro-${customerAcronym}-backend.${AZURE_ENV_SUFFIX}` : 'Set after Azure provisioning'} />
           </Form.Item>
-          <Form.Item name="imageTag" label="Image Tag">
-            <Input placeholder={`Latest: ${LATEST_IMAGE_TAG}`} />
+          <Form.Item name="imageTag" label="ACR Image Tag">
+            <Input placeholder={`Latest: ${LATEST_V5_IMAGE_TAG}`} />
+          </Form.Item>
+          <Form.Item name="v5BuildId" label="V5 Build ID" extra="The PCSv5 build identifier, e.g. PCSv5-20260326-1925-25">
+            <Input placeholder="e.g. PCSv5-20260326-1925-25" />
           </Form.Item>
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={3} />
@@ -1155,8 +1479,11 @@ export default function DeploymentsPage() {
             <Descriptions.Item label="Container App URL">
               {form.getFieldValue('containerAppUrl') || '—'}
             </Descriptions.Item>
-            <Descriptions.Item label="Image Tag">
+            <Descriptions.Item label="ACR Image Tag">
               {form.getFieldValue('imageTag') || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="V5 Build ID">
+              {form.getFieldValue('v5BuildId') || '—'}
             </Descriptions.Item>
             {form.getFieldValue('notes') && (
               <Descriptions.Item label="Notes">
@@ -1253,8 +1580,11 @@ export default function DeploymentsPage() {
           >
             <Input placeholder="e.g. https://procuro-acme-backend.grayriver-3c973afe.uksouth.azurecontainerapps.io" />
           </Form.Item>
-          <Form.Item name="imageTag" label="Image Tag">
-            <Input placeholder={`Latest: ${LATEST_IMAGE_TAG}`} />
+          <Form.Item name="imageTag" label="ACR Image Tag">
+            <Input placeholder={`Latest: ${LATEST_V5_IMAGE_TAG}`} />
+          </Form.Item>
+          <Form.Item name="v5BuildId" label="V5 Build ID" extra="The PCSv5 build identifier, e.g. PCSv5-20260326-1925-25">
+            <Input placeholder="e.g. PCSv5-20260326-1925-25" />
           </Form.Item>
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={3} />
@@ -1297,8 +1627,11 @@ export default function DeploymentsPage() {
             <Descriptions.Item label="Container App URL">
               {editForm.getFieldValue('containerAppUrl') || '—'}
             </Descriptions.Item>
-            <Descriptions.Item label="Image Tag">
+            <Descriptions.Item label="ACR Image Tag">
               {editForm.getFieldValue('imageTag') || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="V5 Build ID">
+              {editForm.getFieldValue('v5BuildId') || '—'}
             </Descriptions.Item>
             {editForm.getFieldValue('notes') && (
               <Descriptions.Item label="Notes">
@@ -1316,6 +1649,14 @@ export default function DeploymentsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>Deployments</Title>
         <Space>
+          <Tooltip title="View V5 source on GitHub">
+            <Button
+              icon={<GithubOutlined />}
+              onClick={() => window.open(V5_GITHUB_URL, '_blank')}
+            >
+              V5 Source
+            </Button>
+          </Tooltip>
           <Button icon={<FileTextOutlined />} onClick={() => {
             setBriefModalOpen(true);
             setBriefCustomer(null);
@@ -1682,6 +2023,177 @@ export default function DeploymentsPage() {
         </Form>
       </Modal>
 
+      {/* Setup Scripts Drawer (post-provisioning) */}
+      <Drawer
+        title={setupDeployment ? `Setup Scripts — ${setupDeployment.deploymentLabel}` : 'Setup Scripts'}
+        onClose={() => {
+          setSetupDrawerOpen(false);
+          setSetupDeployment(null);
+        }}
+        open={setupDrawerOpen}
+        width={720}
+      >
+        {setupDeployment && (
+          <>
+            <Alert
+              message="Post-Provisioning Setup"
+              description="Run these commands in Azure Cloud Shell after the Container App has been created. Replace placeholder values in <angle brackets> with actual credentials."
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+
+            <Card size="small" title="Deployment Summary" style={{ marginBottom: 16 }}>
+              <Descriptions size="small" column={1} bordered>
+                <Descriptions.Item label="Customer">{setupDeployment.customer?.name}</Descriptions.Item>
+                <Descriptions.Item label="Container App"><Text code>{setupDeployment.containerAppName || '—'}</Text></Descriptions.Item>
+                <Descriptions.Item label="Database"><Text code>{setupDeployment.databaseName || '—'}</Text></Descriptions.Item>
+                <Descriptions.Item label="Domain"><Text code>{setupDeployment.customDomain || '—'}</Text></Descriptions.Item>
+                <Descriptions.Item label="V5 Build"><Text code>{setupDeployment.v5BuildId || '—'}</Text></Descriptions.Item>
+                <Descriptions.Item label="Image Tag"><Text code>{setupDeployment.imageTag || '—'}</Text></Descriptions.Item>
+              </Descriptions>
+            </Card>
+
+            <Card
+              size="small"
+              title="Setup Script"
+              extra={
+                <Button size="small" icon={<CopyOutlined />} onClick={() => handleCopySetupScript(setupDeployment)}>
+                  Copy to Clipboard
+                </Button>
+              }
+            >
+              <pre style={{
+                backgroundColor: '#1e1e1e',
+                color: '#d4d4d4',
+                padding: 16,
+                borderRadius: 6,
+                fontSize: 11,
+                lineHeight: 1.5,
+                maxHeight: 500,
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                margin: 0,
+              }}>
+                {generateSetupScript(setupDeployment)}
+              </pre>
+            </Card>
+
+            <div style={{ marginTop: 16 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Once the setup is complete and the health check passes, use <strong>Actions → Mark as Running</strong> to update the deployment status.
+              </Text>
+            </div>
+          </>
+        )}
+      </Drawer>
+
+      {/* Provision Upgrade Modal */}
+      <Modal
+        title={upgradeDeployment ? `Provision Upgrade — ${upgradeDeployment.deploymentLabel}` : 'Provision Upgrade'}
+        open={upgradeModalOpen}
+        onCancel={() => {
+          setUpgradeModalOpen(false);
+          setUpgradeDeployment(null);
+          setUpgradeImageTag('');
+          setUpgradeV5BuildId('');
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setUpgradeModalOpen(false);
+            setUpgradeDeployment(null);
+            setUpgradeImageTag('');
+          }}>
+            Cancel
+          </Button>,
+          <Button
+            key="upgrade"
+            type="primary"
+            icon={<ArrowUpOutlined />}
+            loading={upgradeSubmitting}
+            disabled={!upgradeImageTag}
+            onClick={handleUpgradeSubmit}
+          >
+            Record Upgrade & Copy Script
+          </Button>,
+        ]}
+        width={720}
+      >
+        {upgradeDeployment && (
+          <>
+            <Card size="small" style={{ marginBottom: 16 }}>
+              <Descriptions size="small" column={2}>
+                <Descriptions.Item label="Customer">{upgradeDeployment.customer?.name}</Descriptions.Item>
+                <Descriptions.Item label="Container App"><Text code>{upgradeDeployment.containerAppName}</Text></Descriptions.Item>
+                <Descriptions.Item label="Current Image Tag"><Tag color="orange">{upgradeDeployment.imageTag || 'none'}</Tag></Descriptions.Item>
+                <Descriptions.Item label="Current V5 Build"><Tag color="blue">{upgradeDeployment.v5BuildId || 'not set'}</Tag></Descriptions.Item>
+              </Descriptions>
+            </Card>
+
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text strong>New Image Tag</Text>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<GithubOutlined />}
+                  onClick={() => window.open(`${V5_GITHUB_URL}/commits/main`, '_blank')}
+                >
+                  View V5 Commits
+                </Button>
+              </div>
+              <Input
+                placeholder="e.g. build26"
+                value={upgradeImageTag}
+                onChange={(e) => setUpgradeImageTag(e.target.value)}
+                style={{ marginTop: 8 }}
+                addonBefore={`${ACR_SERVER}/${V5_BACKEND_IMAGE}:`}
+              />
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+                Enter the new V5 build tag. The script will build and deploy both backend and frontend images.
+              </Text>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <Text strong>V5 Build ID</Text>
+              <Input
+                placeholder="e.g. PCSv5-20260330-1500-26"
+                value={upgradeV5BuildId}
+                onChange={(e) => setUpgradeV5BuildId(e.target.value)}
+                style={{ marginTop: 8 }}
+              />
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+                The PCSv5 build identifier from frontend/src/buildInfo.ts — recorded against this deployment.
+              </Text>
+            </div>
+
+            {upgradeImageTag && (
+              <Card
+                size="small"
+                title={`Upgrade Script: ${upgradeDeployment.imageTag || 'unknown'} → ${upgradeImageTag}`}
+              >
+                <pre style={{
+                  backgroundColor: '#1e1e1e',
+                  color: '#d4d4d4',
+                  padding: 16,
+                  borderRadius: 6,
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                  maxHeight: 300,
+                  overflow: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  margin: 0,
+                }}>
+                  {generateUpgradeScript(upgradeDeployment, upgradeImageTag)}
+                </pre>
+              </Card>
+            )}
+          </>
+        )}
+      </Modal>
+
       {/* Pre-Provisioning Brief Modal */}
       <Modal
         title="Prepare Azure Setup"
@@ -1748,7 +2260,7 @@ export default function DeploymentsPage() {
                 <Descriptions.Item label="Container App URL">
                   <Text code style={{ fontSize: 11 }}>https://procuro-{briefAcronym}-backend.{AZURE_ENV_SUFFIX}</Text>
                 </Descriptions.Item>
-                <Descriptions.Item label="Image Tag"><Text code>{LATEST_IMAGE_TAG}</Text></Descriptions.Item>
+                <Descriptions.Item label="Image Tag"><Text code>{LATEST_V5_IMAGE_TAG}</Text></Descriptions.Item>
               </Descriptions>
             </Card>
 

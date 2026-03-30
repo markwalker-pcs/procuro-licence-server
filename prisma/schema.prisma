@@ -50,7 +50,8 @@ model Deployment {
   // Application configuration
   containerAppName  String?          // Azure Container App name, e.g. "procuro-acme-backend"
   containerAppUrl   String?          // Full URL, e.g. "https://procuro-acme.grayriver-3c973afe.uksouth.azurecontainerapps.io"
-  imageTag          String?          // Current deployed image tag, e.g. "build25"
+  imageTag          String?          // Current deployed ACR image tag, e.g. "build25"
+  v5BuildId         String?          // Pro-curo V5 application build ID, e.g. "PCSv5-20260326-1925-25"
   customDomain      String?          // Custom domain for the deployment
   sslCertExpiry     DateTime?        // SSL certificate expiry date
 
@@ -70,6 +71,9 @@ model Deployment {
   customer Customer @relation(fields: [customerId], references: [id])
   configs  TenantConfig[]
 
+  @@unique([containerAppName])
+  @@unique([customDomain])
+  @@unique([databaseName, databaseHost])
   @@index([customerId])
   @@index([status])
   @@map("deployments")
