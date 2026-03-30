@@ -38,7 +38,7 @@ router.get('/:deploymentId', async (req: Request, res: Response) => {
 
   // Group by category and mask secrets
   const grouped: Record<string, any[]> = {};
-  configs.forEach((config) => {
+  configs.forEach((config: any) => {
     if (!grouped[config.category]) {
       grouped[config.category] = [];
     }

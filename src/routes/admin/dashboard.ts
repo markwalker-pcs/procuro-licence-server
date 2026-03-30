@@ -80,14 +80,14 @@ router.get('/alerts', async (_req: Request, res: Response) => {
 
   res.json({
     data: {
-      offlineInstances: offlineInstances.map((i) => ({
+      offlineInstances: offlineInstances.map((i: any) => ({
         instanceId: i.id,
         instanceUuid: i.instanceUuid,
         lastCheckIn: i.lastCheckIn,
         customer: i.licence.customer.name,
         severity: 'warning',
       })),
-      expiringLicences: expiringLicences.map((l) => ({
+      expiringLicences: expiringLicences.map((l: any) => ({
         licenceId: l.id,
         expiryDate: l.expiryDate,
         customer: l.customer.name,

@@ -9,10 +9,10 @@ export const prisma = new PrismaClient({
   ],
 });
 
-prisma.$on('error', (e) => {
+prisma.$on('error', (e: { message: string }) => {
   logger.error('Prisma error', { message: e.message });
 });
 
-prisma.$on('warn', (e) => {
+prisma.$on('warn', (e: { message: string }) => {
   logger.warn('Prisma warning', { message: e.message });
 });
