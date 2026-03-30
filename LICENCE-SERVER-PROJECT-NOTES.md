@@ -10,9 +10,9 @@
 ## Current Status
 
 **Phase:** Phases 1–6 complete, deployed to Azure
-**Current Build:** PLS-20260330-1200-10
+**Current Build:** PLS-20260330-1545-11
 **Build Status:** Docker build passing, server running on Azure Container Apps
-**Deployed:** Yes — Azure Container Apps (UK South), Build 10 deployed 30 March 2026
+**Deployed:** Build 10 — Azure Container Apps (UK South), deployed 30 March 2026. Build 11 pending deployment.
 **First Successful Build:** 26 March 2026 — health endpoint confirmed at http://localhost:3100/health
 
 ---
@@ -262,6 +262,8 @@ See `.env.example` for full list. Key variables:
 | PLS-20260327-1000-07 | 27 March 2026 | Smart provisioning wizard — auto-populate from customer deployment model (SaaS/Hybrid), acronym-based naming (database, domain, container app), latest image tag default, custom domain in table + edit modal, seed passwordHash fix for existing users. |
 | PLS-20260327-1457-08 | 30 March 2026 | Pre-provisioning brief — "Prepare Azure Setup" feature generates resource summary and Azure CLI script (database, container app, env vars, custom domain, migration) per customer. Copy-to-clipboard and print support. SaaS and Hybrid script variants. |
 | PLS-20260330-0700-09 | 30 March 2026 | Fix provisioning — added express-async-errors (Express 4 async handler bug), wizard form values now preserved across steps (display:none instead of unmount), per-step field validation, Container App URL made optional, better error messages on POST failures. |
+| PLS-20260330-1200-10 | 30 March 2026 | V5 build tracking — v5BuildId field on deployments, Prepare Azure Setup scripts with SaaS/Hybrid variants, Provision Upgrade modal, Actions dropdown menu, status column with build tags, GitHub link to V5 repo, uniqueness constraints on containerAppName/customDomain/databaseName+host, correct V5 image names (procurov5-backend/procurov5-frontend). |
+| PLS-20260330-1545-11 | 30 March 2026 | Frontend container support — frontendAppName + frontendAppUrl fields on deployments (schema, API, UI), auto-generated UUID/JWT in all setup scripts, provisioning defaults V5 Build ID + image tag to latest, tenant config blank screen fix (grouped API response flattening), resource summary shows both backend and frontend containers with URLs in all scripts, custom domain CNAME points to frontend container, upgrade script uses stored frontend container name. |
 
 ---
 

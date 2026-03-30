@@ -72,6 +72,8 @@ const createDeploymentSchema = z.object({
     .optional(),
   containerAppName: z.string().optional(),
   containerAppUrl: z.string().optional(),
+  frontendAppName: z.string().optional(),
+  frontendAppUrl: z.string().optional(),
   imageTag: z.string().optional(),
   v5BuildId: z.string().optional(),
   customDomain: z.string().optional(),
@@ -98,6 +100,8 @@ router.post('/', async (req: AdminAuthRequest, res: Response) => {
         connectivityType: data.connectivityType || null,
         containerAppName: data.containerAppName || null,
         containerAppUrl: data.containerAppUrl || null,
+        frontendAppName: data.frontendAppName || null,
+        frontendAppUrl: data.frontendAppUrl || null,
         imageTag: data.imageTag || null,
         v5BuildId: data.v5BuildId || null,
         customDomain: data.customDomain || null,
@@ -154,7 +158,9 @@ router.post('/', async (req: AdminAuthRequest, res: Response) => {
       const target = err.meta?.target as string[] | undefined;
       let detail = 'A deployment with these details already exists';
       if (target?.includes('containerAppName')) {
-        detail = 'A deployment with this Container App name already exists';
+        detail = 'A deployment with this backend Container App name already exists';
+      } else if (target?.includes('frontendAppName')) {
+        detail = 'A deployment with this frontend Container App name already exists';
       } else if (target?.includes('customDomain')) {
         detail = 'A deployment with this custom domain already exists';
       } else if (target?.includes('databaseName')) {
@@ -187,6 +193,8 @@ const updateDeploymentSchema = z.object({
     .nullable(),
   containerAppName: z.string().optional().nullable(),
   containerAppUrl: z.string().optional().nullable(),
+  frontendAppName: z.string().optional().nullable(),
+  frontendAppUrl: z.string().optional().nullable(),
   imageTag: z.string().optional().nullable(),
   v5BuildId: z.string().optional().nullable(),
   customDomain: z.string().optional().nullable(),
@@ -229,7 +237,9 @@ router.patch('/:id', async (req: AdminAuthRequest, res: Response) => {
       const target = err.meta?.target as string[] | undefined;
       let detail = 'A deployment with these details already exists';
       if (target?.includes('containerAppName')) {
-        detail = 'A deployment with this Container App name already exists';
+        detail = 'A deployment with this backend Container App name already exists';
+      } else if (target?.includes('frontendAppName')) {
+        detail = 'A deployment with this frontend Container App name already exists';
       } else if (target?.includes('customDomain')) {
         detail = 'A deployment with this custom domain already exists';
       } else if (target?.includes('databaseName')) {
@@ -322,6 +332,26 @@ router.patch('/:id', async (req: AdminAuthRequest, res: Response) => {
     changedFields.containerAppUrl = {
       old: existingDeployment.containerAppUrl,
       new: updates.containerAppUrl,
+    };
+    hasChanges = true;
+  }
+  if (
+    updates.frontendAppName !== undefined &&
+    updates.frontendAppName !== existingDeployment.frontendAppName
+  ) {
+    changedFields.frontendAppName = {
+      old: existingDeployment.frontendAppName,
+      new: updates.frontendAppName,
+    };
+    hasChanges = true;
+  }
+  if (
+    updates.frontendAppUrl !== undefined &&
+    updates.frontendAppUrl !== existingDeployment.frontendAppUrl
+  ) {
+    changedFields.frontendAppUrl = {
+      old: existingDeployment.frontendAppUrl,
+      new: updates.frontendAppUrl,
     };
     hasChanges = true;
   }

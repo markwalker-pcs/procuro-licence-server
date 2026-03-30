@@ -152,6 +152,8 @@ export interface Deployment {
   status: DeploymentStatus;
   containerAppName: string | null;
   containerAppUrl: string | null;
+  frontendAppName: string | null;
+  frontendAppUrl: string | null;
   imageTag: string | null;
   v5BuildId: string | null;
   customDomain: string | null;

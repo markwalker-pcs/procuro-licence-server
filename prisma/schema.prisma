@@ -47,12 +47,15 @@ model Deployment {
   deploymentLabel   String           // Friendly name, e.g. "ACME Corp Production"
   status            DeploymentStatus @default(PROVISIONING)
 
-  // Application configuration
+  // Application configuration — Backend container
   containerAppName  String?          // Azure Container App name, e.g. "procuro-acme-backend"
-  containerAppUrl   String?          // Full URL, e.g. "https://procuro-acme.grayriver-3c973afe.uksouth.azurecontainerapps.io"
+  containerAppUrl   String?          // Full URL, e.g. "https://procuro-acme-backend.grayriver-3c973afe.uksouth.azurecontainerapps.io"
+  // Application configuration — Frontend container
+  frontendAppName   String?          // Azure Container App name, e.g. "procuro-acme-frontend"
+  frontendAppUrl    String?          // Full URL, e.g. "https://procuro-acme-frontend.grayriver-3c973afe.uksouth.azurecontainerapps.io"
   imageTag          String?          // Current deployed ACR image tag, e.g. "build25"
   v5BuildId         String?          // Pro-curo V5 application build ID, e.g. "PCSv5-20260326-1925-25"
-  customDomain      String?          // Custom domain for the deployment
+  customDomain      String?          // Custom domain — points to frontend container
   sslCertExpiry     DateTime?        // SSL certificate expiry date
 
   // Database configuration
@@ -72,6 +75,7 @@ model Deployment {
   configs  TenantConfig[]
 
   @@unique([containerAppName])
+  @@unique([frontendAppName])
   @@unique([customDomain])
   @@unique([databaseName, databaseHost])
   @@index([customerId])

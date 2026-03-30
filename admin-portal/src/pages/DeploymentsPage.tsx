@@ -57,8 +57,9 @@ const SAAS_DEFAULTS = {
 // Azure Container Apps environment suffix — same for all apps in procuro-env
 const AZURE_ENV_SUFFIX = 'grayriver-3c973afe.uksouth.azurecontainerapps.io';
 
-// Latest deployed V5 application image tag — update with each release
+// Latest deployed V5 application identifiers — update with each V5 release
 const LATEST_V5_IMAGE_TAG = 'build25';
+const LATEST_V5_BUILD_ID = 'PCSv5-20260326-1925-25';
 
 // Pro-curo V5 GitHub repository
 const V5_GITHUB_URL = 'https://github.com/markwalker-pcs/procuro-v5';
@@ -176,7 +177,19 @@ export default function DeploymentsPage() {
     setConfigsLoading(true);
     try {
       const res = await api.get(`/admin/tenant-config/${deploymentId}`);
-      setConfigs(res.data.data || []);
+      // API returns { grouped: { category: [...] }, total: N } — flatten to array
+      const data = res.data.data;
+      if (data?.grouped) {
+        const flat: TenantConfig[] = [];
+        Object.values(data.grouped).forEach((entries: any) => {
+          flat.push(...entries);
+        });
+        setConfigs(flat);
+      } else if (Array.isArray(data)) {
+        setConfigs(data);
+      } else {
+        setConfigs([]);
+      }
     } catch {
       message.error('Failed to load tenant configurations');
       setConfigs([]);
@@ -207,7 +220,8 @@ export default function DeploymentsPage() {
       const acronym = generateAcronym(customer.name);
       setCustomerAcronym(acronym);
 
-      const appName = acronym ? `procuro-${acronym}-backend` : '';
+      const backendAppName = acronym ? `procuro-${acronym}-backend` : '';
+      const frontendName = acronym ? `procuro-${acronym}-frontend` : '';
 
       if (isSaas) {
         // Auto-populate SaaS defaults — our Azure infrastructure
@@ -218,10 +232,13 @@ export default function DeploymentsPage() {
           databaseName: acronym ? `${acronym}_procuro` : '',
           connectivityType: SAAS_DEFAULTS.connectivityType,
           deploymentLabel: `${customer.name} Production`,
-          containerAppName: appName,
+          containerAppName: backendAppName,
+          frontendAppName: frontendName,
           containerAppUrl: '',
+          frontendAppUrl: '',
           customDomain: acronym ? `${acronym}.app.pro-curo.com` : '',
           imageTag: LATEST_V5_IMAGE_TAG,
+          v5BuildId: LATEST_V5_BUILD_ID,
         });
       } else {
         // Hybrid / On-Premises — suggest naming but leave DB config blank
@@ -232,10 +249,13 @@ export default function DeploymentsPage() {
           databaseName: acronym ? `${acronym}_procuro` : '',
           connectivityType: undefined,
           deploymentLabel: `${customer.name} Production`,
-          containerAppName: appName,
+          containerAppName: backendAppName,
+          frontendAppName: frontendName,
           containerAppUrl: '',
+          frontendAppUrl: '',
           customDomain: acronym ? `${acronym}.app.pro-curo.com` : '',
           imageTag: LATEST_V5_IMAGE_TAG,
+          v5BuildId: LATEST_V5_BUILD_ID,
         });
       }
     }
@@ -245,7 +265,7 @@ export default function DeploymentsPage() {
   const createStepFields: string[][] = [
     ['customerId'],
     ['databaseType', 'databaseHost', 'databasePort', 'databaseName', 'connectivityType'],
-    ['deploymentLabel', 'containerAppName', 'customDomain', 'containerAppUrl', 'imageTag', 'v5BuildId', 'notes'],
+    ['deploymentLabel', 'containerAppName', 'frontendAppName', 'customDomain', 'containerAppUrl', 'frontendAppUrl', 'imageTag', 'v5BuildId', 'notes'],
     [], // Review step — no validation needed
   ];
 
@@ -295,8 +315,10 @@ export default function DeploymentsPage() {
       connectivityType: deployment.connectivityType,
       deploymentLabel: deployment.deploymentLabel,
       containerAppName: deployment.containerAppName,
+      frontendAppName: deployment.frontendAppName,
       customDomain: deployment.customDomain,
       containerAppUrl: deployment.containerAppUrl,
+      frontendAppUrl: deployment.frontendAppUrl,
       imageTag: deployment.imageTag,
       v5BuildId: deployment.v5BuildId,
       notes: deployment.notes,
@@ -307,7 +329,7 @@ export default function DeploymentsPage() {
   const editStepFields: string[][] = [
     ['customerId'],
     ['databaseType', 'databaseHost', 'databasePort', 'databaseName', 'connectivityType'],
-    ['deploymentLabel', 'containerAppName', 'customDomain', 'containerAppUrl', 'imageTag', 'v5BuildId', 'notes'],
+    ['deploymentLabel', 'containerAppName', 'frontendAppName', 'customDomain', 'containerAppUrl', 'frontendAppUrl', 'imageTag', 'v5BuildId', 'notes'],
     [],
   ];
 
@@ -577,8 +599,10 @@ export default function DeploymentsPage() {
 
     const dbName = `${briefAcronym}_procuro`;
     const appName = `procuro-${briefAcronym}-backend`;
+    const frontendAppName = `procuro-${briefAcronym}-frontend`;
     const domain = `${briefAcronym}.app.pro-curo.com`;
-    const appUrl = `https://${appName}.${AZURE_ENV_SUFFIX}`;
+    const backendUrl = `https://${appName}.${AZURE_ENV_SUFFIX}`;
+    const frontendUrl = `https://${frontendAppName}.${AZURE_ENV_SUFFIX}`;
     const isSaas = briefType === 'SAAS';
 
     const lines: string[] = [];
@@ -587,17 +611,21 @@ export default function DeploymentsPage() {
     lines.push(`# Customer: ${briefCustomer.name}`);
     lines.push(`# Customer No: ${briefCustomer.customerNumber}`);
     lines.push(`# Deployment Type: ${isSaas ? 'SaaS (Pro-curo Azure)' : 'Hybrid (Client Infrastructure)'}`);
+    lines.push(`# V5 Build:          ${LATEST_V5_BUILD_ID}`);
     lines.push(`# Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
     lines.push(`# ═══════════════════════════════════════════════════════════════════`);
     lines.push('');
     lines.push(`# RESOURCE NAMING SUMMARY`);
     lines.push(`# ───────────────────────`);
-    lines.push(`# Acronym:            ${briefAcronym}`);
-    lines.push(`# Database Name:      ${dbName}`);
-    lines.push(`# Container App:      ${appName}`);
-    lines.push(`# Custom Domain:      ${domain}`);
-    lines.push(`# Container App URL:  ${appUrl}`);
-    lines.push(`# Image Tag:          ${LATEST_V5_IMAGE_TAG}`);
+    lines.push(`# Acronym:              ${briefAcronym}`);
+    lines.push(`# Database Name:        ${dbName}`);
+    lines.push(`# Backend Container:    ${appName}`);
+    lines.push(`# Frontend Container:   ${frontendAppName}`);
+    lines.push(`# Custom Domain:        ${domain}`);
+    lines.push(`# Backend URL:          ${backendUrl}`);
+    lines.push(`# Frontend URL:         ${frontendUrl}`);
+    lines.push(`# V5 Build ID:          ${LATEST_V5_BUILD_ID}`);
+    lines.push(`# ACR Image Tag:        ${LATEST_V5_IMAGE_TAG}`);
     lines.push('');
 
     if (isSaas) {
@@ -646,47 +674,55 @@ export default function DeploymentsPage() {
       lines.push(`  --env-vars BACKEND_URL="https://${appName}.${AZURE_ENV_SUFFIX}"`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# STEP 3: Set Backend Environment Variables`);
+      lines.push(`# STEP 3: Generate Secrets`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# Generate secrets first:`);
-      lines.push(`#   JWT_SECRET:         openssl rand -hex 32`);
-      lines.push(`#   LICENCE_INSTANCE_ID: uuidgen`);
+      lines.push('');
+      lines.push(`JWT_SECRET=$(openssl rand -hex 32)`);
+      lines.push(`LICENCE_INSTANCE_ID=$(uuidgen)`);
+      lines.push(`echo "Generated JWT_SECRET:          $JWT_SECRET"`);
+      lines.push(`echo "Generated LICENCE_INSTANCE_ID: $LICENCE_INSTANCE_ID"`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 4: Set Backend Environment Variables`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# NOTE: Replace <DB_USER>, <DB_PASSWORD>, <LICENCE_KEY>, <LICENCE_HMAC_SECRET>`);
+      lines.push(`# with actual credentials from Azure Key Vault / Licence Server admin portal.`);
       lines.push('');
       lines.push(`az containerapp update \\`);
       lines.push(`  --name ${appName} \\`);
       lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
       lines.push(`  --set-env-vars \\`);
-      lines.push(`    DATABASE_URL="postgresql://<USER>:<PASSWORD>@${SAAS_DEFAULTS.databaseHost}:5432/${dbName}" \\`);
+      lines.push(`    DATABASE_URL="postgresql://<DB_USER>:<DB_PASSWORD>@${SAAS_DEFAULTS.databaseHost}:5432/${dbName}?sslmode=require" \\`);
       lines.push(`    NODE_ENV=production \\`);
       lines.push(`    PORT=3100 \\`);
-      lines.push(`    JWT_SECRET="<GENERATED_JWT_SECRET>" \\`);
+      lines.push(`    JWT_SECRET="$JWT_SECRET" \\`);
       lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
       lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
-      lines.push(`    LICENCE_KEY="<FROM_LICENCE_SERVER>" \\`);
-      lines.push(`    LICENCE_HMAC_SECRET="<FROM_LICENCE_SERVER>" \\`);
-      lines.push(`    LICENCE_INSTANCE_ID="<GENERATED_UUID>" \\`);
+      lines.push(`    LICENCE_KEY="<LICENCE_KEY>" \\`);
+      lines.push(`    LICENCE_HMAC_SECRET="<LICENCE_HMAC_SECRET>" \\`);
+      lines.push(`    LICENCE_INSTANCE_ID="$LICENCE_INSTANCE_ID" \\`);
       lines.push(`    LICENCE_ENABLED=true`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# STEP 4: Configure Custom Domain & SSL`);
+      lines.push(`# STEP 5: Configure Custom Domain & SSL`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push(`# First: add a CNAME record in DNS pointing ${domain} to:`);
-      lines.push(`#   ${appName}.${AZURE_ENV_SUFFIX}`);
+      lines.push(`#   ${frontendAppName}.${AZURE_ENV_SUFFIX}`);
       lines.push('');
       lines.push(`az containerapp hostname add \\`);
-      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --name ${frontendAppName} \\`);
       lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
       lines.push(`  --hostname ${domain}`);
       lines.push('');
       lines.push(`az containerapp hostname bind \\`);
-      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --name ${frontendAppName} \\`);
       lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
       lines.push(`  --hostname ${domain} \\`);
       lines.push(`  --environment ${CONTAINER_ENV} \\`);
       lines.push(`  --validation-method CNAME`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# STEP 5: Run Database Migration`);
+      lines.push(`# STEP 6: Run Database Migration`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push('');
       lines.push(`az containerapp exec \\`);
@@ -697,8 +733,9 @@ export default function DeploymentsPage() {
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push(`# DONE — Now go to the Admin Portal → Deployments → Provision`);
       lines.push(`# Select: ${briefCustomer.name}`);
-      lines.push(`# All fields will auto-populate. Confirm the Container App URL:`);
-      lines.push(`#   ${appUrl}`);
+      lines.push(`# All fields will auto-populate. Confirm the URLs:`);
+      lines.push(`#   Backend:  ${backendUrl}`);
+      lines.push(`#   Frontend: ${frontendUrl}`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
     } else {
       // Hybrid
@@ -765,11 +802,19 @@ export default function DeploymentsPage() {
       lines.push(`  --command "node -e \\"const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.\\\\\\$connect().then(()=>{console.log('Connected');p.\\\\\\$disconnect()}).catch(e=>console.error(e))\\""`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# STEP 3: Set Environment Variables (once connectivity confirmed)`);
+      lines.push(`# STEP 3: Generate Secrets`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# Generate secrets first:`);
-      lines.push(`#   JWT_SECRET:         openssl rand -hex 32`);
-      lines.push(`#   LICENCE_INSTANCE_ID: uuidgen`);
+      lines.push('');
+      lines.push(`JWT_SECRET=$(openssl rand -hex 32)`);
+      lines.push(`LICENCE_INSTANCE_ID=$(uuidgen)`);
+      lines.push(`echo "Generated JWT_SECRET:          $JWT_SECRET"`);
+      lines.push(`echo "Generated LICENCE_INSTANCE_ID: $LICENCE_INSTANCE_ID"`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 4: Set Environment Variables (once connectivity confirmed)`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# NOTE: Replace <CLIENT_DB_URL>, <LICENCE_KEY>, <LICENCE_HMAC_SECRET>`);
+      lines.push(`# with actual credentials.`);
       lines.push('');
       lines.push(`az containerapp update \\`);
       lines.push(`  --name ${appName} \\`);
@@ -778,34 +823,34 @@ export default function DeploymentsPage() {
       lines.push(`    DATABASE_URL="<CLIENT_DB_URL>" \\`);
       lines.push(`    NODE_ENV=production \\`);
       lines.push(`    PORT=3100 \\`);
-      lines.push(`    JWT_SECRET="<GENERATED_JWT_SECRET>" \\`);
+      lines.push(`    JWT_SECRET="$JWT_SECRET" \\`);
       lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
       lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
-      lines.push(`    LICENCE_KEY="<FROM_LICENCE_SERVER>" \\`);
-      lines.push(`    LICENCE_HMAC_SECRET="<FROM_LICENCE_SERVER>" \\`);
-      lines.push(`    LICENCE_INSTANCE_ID="<GENERATED_UUID>" \\`);
+      lines.push(`    LICENCE_KEY="<LICENCE_KEY>" \\`);
+      lines.push(`    LICENCE_HMAC_SECRET="<LICENCE_HMAC_SECRET>" \\`);
+      lines.push(`    LICENCE_INSTANCE_ID="$LICENCE_INSTANCE_ID" \\`);
       lines.push(`    LICENCE_ENABLED=true`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# STEP 4: Configure Custom Domain & SSL`);
+      lines.push(`# STEP 5: Configure Custom Domain & SSL`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push(`# First: add a CNAME record in DNS pointing ${domain} to:`);
-      lines.push(`#   ${appName}.${AZURE_ENV_SUFFIX}`);
+      lines.push(`#   ${frontendAppName}.${AZURE_ENV_SUFFIX}`);
       lines.push('');
       lines.push(`az containerapp hostname add \\`);
-      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --name ${frontendAppName} \\`);
       lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
       lines.push(`  --hostname ${domain}`);
       lines.push('');
       lines.push(`az containerapp hostname bind \\`);
-      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --name ${frontendAppName} \\`);
       lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
       lines.push(`  --hostname ${domain} \\`);
       lines.push(`  --environment ${CONTAINER_ENV} \\`);
       lines.push(`  --validation-method CNAME`);
       lines.push('');
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
-      lines.push(`# STEP 5: Run Database Migration`);
+      lines.push(`# STEP 6: Run Database Migration`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
       lines.push('');
       lines.push(`az containerapp exec \\`);
@@ -817,8 +862,9 @@ export default function DeploymentsPage() {
       lines.push(`# DONE — Now go to the Admin Portal → Deployments → Provision`);
       lines.push(`# Select: ${briefCustomer.name}`);
       lines.push(`# Enter the client's database details in the wizard.`);
-      lines.push(`# Confirm the Container App URL:`);
-      lines.push(`#   ${appUrl}`);
+      lines.push(`# Confirm the URLs:`);
+      lines.push(`#   Backend:  ${backendUrl}`);
+      lines.push(`#   Frontend: ${frontendUrl}`);
       lines.push(`# ═══════════════════════════════════════════════════════════════════`);
     }
 
@@ -850,81 +896,112 @@ export default function DeploymentsPage() {
   // ─── Setup Scripts Generator (post-provisioning) ───
   const generateSetupScript = (deployment: Deployment): string => {
     const lines: string[] = [];
-    const appName = deployment.containerAppName || 'procuro-UNKNOWN-backend';
+    const backendApp = deployment.containerAppName || 'procuro-UNKNOWN-backend';
+    const frontendApp = deployment.frontendAppName || backendApp.replace('-backend', '-frontend');
     const dbName = deployment.databaseName || 'UNKNOWN_procuro';
     const domain = deployment.customDomain || 'UNKNOWN.app.pro-curo.com';
     const dbHost = deployment.databaseHost || 'procuro-db.postgres.database.azure.com';
     const isSaas = deployment.customer?.deploymentModel === 'SAAS';
+    const backendUrl = deployment.containerAppUrl || `https://${backendApp}.${AZURE_ENV_SUFFIX}`;
+    const frontendUrl = deployment.frontendAppUrl || `https://${frontendApp}.${AZURE_ENV_SUFFIX}`;
 
     lines.push(`# ═══════════════════════════════════════════════════════════════════`);
     lines.push(`# PRO-CURO V5 — Post-Provisioning Setup Script`);
-    lines.push(`# Customer: ${deployment.customer?.name || 'Unknown'}`);
-    lines.push(`# Deployment: ${deployment.deploymentLabel}`);
-    lines.push(`# Container App: ${appName}`);
+    lines.push(`# Customer:           ${deployment.customer?.name || 'Unknown'}`);
+    lines.push(`# Deployment:         ${deployment.deploymentLabel}`);
+    lines.push(`# Backend Container:  ${backendApp}`);
+    lines.push(`# Frontend Container: ${frontendApp}`);
+    lines.push(`# Backend URL:        ${backendUrl}`);
+    lines.push(`# Frontend URL:       ${frontendUrl}`);
+    lines.push(`# V5 Build ID:        ${deployment.v5BuildId || LATEST_V5_BUILD_ID}`);
+    lines.push(`# ACR Image Tag:      ${deployment.imageTag || LATEST_V5_IMAGE_TAG}`);
     lines.push(`# Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
     lines.push(`# ═══════════════════════════════════════════════════════════════════`);
     lines.push('');
 
-    lines.push(`# ─── STEP 1: Set Environment Variables ─────────────────────────────`);
-    lines.push(`# Generate secrets first:`);
-    lines.push(`#   JWT_SECRET:          openssl rand -hex 32`);
-    lines.push(`#   LICENCE_INSTANCE_ID: uuidgen`);
+    lines.push(`# ─── STEP 1: Generate Secrets ──────────────────────────────────────`);
+    lines.push('');
+    lines.push(`JWT_SECRET=$(openssl rand -hex 32)`);
+    lines.push(`LICENCE_INSTANCE_ID=$(uuidgen)`);
+    lines.push(`echo "Generated JWT_SECRET:          $JWT_SECRET"`);
+    lines.push(`echo "Generated LICENCE_INSTANCE_ID: $LICENCE_INSTANCE_ID"`);
+    lines.push('');
+
+    lines.push(`# ─── STEP 2: Set Backend Environment Variables ─────────────────────`);
     lines.push('');
 
     if (isSaas) {
       lines.push(`az containerapp update \\`);
-      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --name ${backendApp} \\`);
       lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
       lines.push(`  --set-env-vars \\`);
       lines.push(`    DATABASE_URL="postgresql://<USER>:<PASSWORD>@${dbHost}:${deployment.databasePort || 5432}/${dbName}?sslmode=require" \\`);
       lines.push(`    NODE_ENV=production \\`);
       lines.push(`    PORT=3100 \\`);
-      lines.push(`    JWT_SECRET="<GENERATED_JWT_SECRET>" \\`);
+      lines.push(`    JWT_SECRET="$JWT_SECRET" \\`);
       lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
       lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
       lines.push(`    LICENCE_KEY="<FROM_LICENCE_SERVER>" \\`);
       lines.push(`    LICENCE_HMAC_SECRET="<FROM_LICENCE_SERVER>" \\`);
-      lines.push(`    LICENCE_INSTANCE_ID="<GENERATED_UUID>" \\`);
+      lines.push(`    LICENCE_INSTANCE_ID="$LICENCE_INSTANCE_ID" \\`);
       lines.push(`    LICENCE_ENABLED=true`);
     } else {
       lines.push(`az containerapp update \\`);
-      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --name ${backendApp} \\`);
       lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
       lines.push(`  --set-env-vars \\`);
       lines.push(`    DATABASE_URL="<CLIENT_DATABASE_URL>" \\`);
       lines.push(`    NODE_ENV=production \\`);
       lines.push(`    PORT=3100 \\`);
-      lines.push(`    JWT_SECRET="<GENERATED_JWT_SECRET>" \\`);
+      lines.push(`    JWT_SECRET="$JWT_SECRET" \\`);
       lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
       lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
       lines.push(`    LICENCE_KEY="<FROM_LICENCE_SERVER>" \\`);
       lines.push(`    LICENCE_HMAC_SECRET="<FROM_LICENCE_SERVER>" \\`);
-      lines.push(`    LICENCE_INSTANCE_ID="<GENERATED_UUID>" \\`);
+      lines.push(`    LICENCE_INSTANCE_ID="$LICENCE_INSTANCE_ID" \\`);
       lines.push(`    LICENCE_ENABLED=true`);
     }
 
     lines.push('');
-    lines.push(`# ─── STEP 2: Run Database Migration ────────────────────────────────`);
+    lines.push(`# ─── STEP 3: Set Frontend Environment Variables ────────────────────`);
+    lines.push('');
+    lines.push(`az containerapp update \\`);
+    lines.push(`  --name ${frontendApp} \\`);
+    lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+    lines.push(`  --set-env-vars \\`);
+    lines.push(`    VITE_API_URL="${backendUrl}" \\`);
+    lines.push(`    NODE_ENV=production`);
+
+    lines.push('');
+    lines.push(`# ─── STEP 4: Run Database Migration ────────────────────────────────`);
     lines.push('');
     lines.push(`az containerapp exec \\`);
-    lines.push(`  --name ${appName} \\`);
+    lines.push(`  --name ${backendApp} \\`);
     lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
     lines.push(`  --command "npx prisma migrate deploy"`);
 
     lines.push('');
-    lines.push(`# ─── STEP 3: Verify Deployment ─────────────────────────────────────`);
+    lines.push(`# ─── STEP 5: Configure Custom Domain ───────────────────────────────`);
+    lines.push(`# Add CNAME record pointing ${domain} to the FRONTEND container:`);
+    lines.push(`#   ${domain} → CNAME → ${frontendApp}.${AZURE_ENV_SUFFIX}`);
     lines.push('');
-    if (deployment.containerAppUrl) {
-      lines.push(`# Health check:`);
-      lines.push(`curl -s ${deployment.containerAppUrl}/api/health | jq .`);
-    } else {
-      lines.push(`# Health check (replace with actual Container App URL):`);
-      lines.push(`curl -s https://${appName}.${AZURE_ENV_SUFFIX}/api/health | jq .`);
-    }
+    lines.push(`az containerapp hostname add \\`);
+    lines.push(`  --name ${frontendApp} \\`);
+    lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+    lines.push(`  --hostname ${domain}`);
+
+    lines.push('');
+    lines.push(`# ─── STEP 6: Verify Deployment ─────────────────────────────────────`);
+    lines.push('');
+    lines.push(`# Backend health check:`);
+    lines.push(`curl -s ${backendUrl}/api/health | jq .`);
+    lines.push('');
+    lines.push(`# Frontend check:`);
+    lines.push(`curl -s ${frontendUrl} -o /dev/null -w "%{http_code}"`);
     if (domain) {
       lines.push('');
       lines.push(`# Custom domain check:`);
-      lines.push(`curl -s https://${domain}/api/health | jq .`);
+      lines.push(`curl -s https://${domain} -o /dev/null -w "%{http_code}"`);
     }
 
     lines.push('');
@@ -946,19 +1023,24 @@ export default function DeploymentsPage() {
 
   // ─── Upgrade Script Generator ───
   const generateUpgradeScript = (deployment: Deployment, newTag: string): string => {
-    const appName = deployment.containerAppName || 'procuro-UNKNOWN-backend';
+    const backendApp = deployment.containerAppName || 'procuro-UNKNOWN-backend';
+    const frontendApp = deployment.frontendAppName || backendApp.replace('-backend', '-frontend');
+    const backendUrl = deployment.containerAppUrl || `https://${backendApp}.${AZURE_ENV_SUFFIX}`;
+    const frontendUrl = deployment.frontendAppUrl || `https://${frontendApp}.${AZURE_ENV_SUFFIX}`;
     const lines: string[] = [];
 
     lines.push(`# ═══════════════════════════════════════════════════════════════════`);
     lines.push(`# PRO-CURO V5 — Upgrade Script`);
-    lines.push(`# Customer: ${deployment.customer?.name || 'Unknown'}`);
-    lines.push(`# Deployment: ${deployment.deploymentLabel}`);
+    lines.push(`# Customer:           ${deployment.customer?.name || 'Unknown'}`);
+    lines.push(`# Deployment:         ${deployment.deploymentLabel}`);
+    lines.push(`# Backend Container:  ${backendApp}`);
+    lines.push(`# Frontend Container: ${frontendApp}`);
+    lines.push(`# Backend URL:        ${backendUrl}`);
+    lines.push(`# Frontend URL:       ${frontendUrl}`);
     lines.push(`# Upgrading: ${deployment.imageTag || 'unknown'} → ${newTag}`);
     lines.push(`# Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
     lines.push(`# ═══════════════════════════════════════════════════════════════════`);
     lines.push('');
-
-    const frontendAppName = appName.replace('-backend', '-frontend');
 
     lines.push(`# ─── STEP 1: Build Updated Images in ACR ───────────────────────────`);
     lines.push(`# Run from Azure Cloud Shell after pulling latest source`);
@@ -973,12 +1055,12 @@ export default function DeploymentsPage() {
     lines.push(`# ─── STEP 2: Update Container Apps ─────────────────────────────────`);
     lines.push('');
     lines.push(`az containerapp update \\`);
-    lines.push(`  --name ${appName} \\`);
+    lines.push(`  --name ${backendApp} \\`);
     lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
     lines.push(`  --image ${ACR_SERVER}/${V5_BACKEND_IMAGE}:${newTag}`);
     lines.push('');
     lines.push(`az containerapp update \\`);
-    lines.push(`  --name ${frontendAppName} \\`);
+    lines.push(`  --name ${frontendApp} \\`);
     lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
     lines.push(`  --image ${ACR_SERVER}/${V5_FRONTEND_IMAGE}:${newTag}`);
 
@@ -986,18 +1068,18 @@ export default function DeploymentsPage() {
     lines.push(`# ─── STEP 3: Run Database Migration (if schema changes) ─────────────`);
     lines.push('');
     lines.push(`az containerapp exec \\`);
-    lines.push(`  --name ${appName} \\`);
+    lines.push(`  --name ${backendApp} \\`);
     lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
     lines.push(`  --command "npx prisma migrate deploy"`);
 
     lines.push('');
     lines.push(`# ─── STEP 4: Verify Upgrade ─────────────────────────────────────────`);
     lines.push('');
-    if (deployment.containerAppUrl) {
-      lines.push(`curl -s ${deployment.containerAppUrl}/api/health | jq .`);
-    } else {
-      lines.push(`curl -s https://${appName}.${AZURE_ENV_SUFFIX}/api/health | jq .`);
-    }
+    lines.push(`# Backend health check:`);
+    lines.push(`curl -s ${backendUrl}/api/health | jq .`);
+    lines.push('');
+    lines.push(`# Frontend check:`);
+    lines.push(`curl -s ${frontendUrl} -o /dev/null -w "%{http_code}"`);
     lines.push(`# Confirm the build ID shows: PCSv5 build matching ${newTag}`);
 
     lines.push('');
@@ -1416,18 +1498,28 @@ export default function DeploymentsPage() {
           <Form.Item name="deploymentLabel" label="Deployment Label" rules={[{ required: true }]}>
             <Input placeholder="e.g. Acme Production" />
           </Form.Item>
-          <Form.Item name="containerAppName" label="Container App Name">
+          <Form.Item name="containerAppName" label="Backend Container App Name">
             <Input placeholder={customerAcronym ? `e.g. procuro-${customerAcronym}-backend` : 'e.g. procuro-acme-backend'} />
           </Form.Item>
-          <Form.Item name="customDomain" label="Customer Domain">
+          <Form.Item name="frontendAppName" label="Frontend Container App Name">
+            <Input placeholder={customerAcronym ? `e.g. procuro-${customerAcronym}-frontend` : 'e.g. procuro-acme-frontend'} />
+          </Form.Item>
+          <Form.Item name="customDomain" label="Customer Domain" extra="Points to the frontend container">
             <Input placeholder={customerAcronym ? `e.g. ${customerAcronym}.app.pro-curo.com` : 'e.g. acme.app.pro-curo.com'} />
           </Form.Item>
           <Form.Item
             name="containerAppUrl"
-            label="Container App URL (optional — set after Azure setup)"
-            extra="Leave blank during provisioning. Update after creating the Container App in Azure, or use Prepare Azure Setup to generate the script first."
+            label="Backend App URL (optional — set after Azure setup)"
+            extra="Leave blank during provisioning. Update after creating the Container App in Azure."
           >
             <Input placeholder={customerAcronym ? `e.g. https://procuro-${customerAcronym}-backend.${AZURE_ENV_SUFFIX}` : 'Set after Azure provisioning'} />
+          </Form.Item>
+          <Form.Item
+            name="frontendAppUrl"
+            label="Frontend App URL (optional — set after Azure setup)"
+            extra="Leave blank during provisioning. Update after creating the Container App in Azure."
+          >
+            <Input placeholder={customerAcronym ? `e.g. https://procuro-${customerAcronym}-frontend.${AZURE_ENV_SUFFIX}` : 'Set after Azure provisioning'} />
           </Form.Item>
           <Form.Item name="imageTag" label="ACR Image Tag">
             <Input placeholder={`Latest: ${LATEST_V5_IMAGE_TAG}`} />
@@ -1470,14 +1562,20 @@ export default function DeploymentsPage() {
             <Descriptions.Item label="Deployment Label">
               {form.getFieldValue('deploymentLabel')}
             </Descriptions.Item>
-            <Descriptions.Item label="Container App Name">
+            <Descriptions.Item label="Backend Container App">
               {form.getFieldValue('containerAppName') || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Frontend Container App">
+              {form.getFieldValue('frontendAppName') || '—'}
             </Descriptions.Item>
             <Descriptions.Item label="Customer Domain">
               {form.getFieldValue('customDomain') || '—'}
             </Descriptions.Item>
-            <Descriptions.Item label="Container App URL">
+            <Descriptions.Item label="Backend App URL">
               {form.getFieldValue('containerAppUrl') || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Frontend App URL">
+              {form.getFieldValue('frontendAppUrl') || '—'}
             </Descriptions.Item>
             <Descriptions.Item label="ACR Image Tag">
               {form.getFieldValue('imageTag') || '—'}
@@ -1567,18 +1665,28 @@ export default function DeploymentsPage() {
           <Form.Item name="deploymentLabel" label="Deployment Label" rules={[{ required: true }]}>
             <Input placeholder="e.g. Acme Production" />
           </Form.Item>
-          <Form.Item name="containerAppName" label="Container App Name">
+          <Form.Item name="containerAppName" label="Backend Container App Name">
             <Input placeholder="e.g. procuro-acme-backend" />
           </Form.Item>
-          <Form.Item name="customDomain" label="Customer Domain">
+          <Form.Item name="frontendAppName" label="Frontend Container App Name">
+            <Input placeholder="e.g. procuro-acme-frontend" />
+          </Form.Item>
+          <Form.Item name="customDomain" label="Customer Domain" extra="Points to the frontend container">
             <Input placeholder="e.g. acme.app.pro-curo.com" />
           </Form.Item>
           <Form.Item
             name="containerAppUrl"
-            label="Container App URL"
+            label="Backend App URL"
             extra="Confirm after creating the resource in Azure."
           >
             <Input placeholder="e.g. https://procuro-acme-backend.grayriver-3c973afe.uksouth.azurecontainerapps.io" />
+          </Form.Item>
+          <Form.Item
+            name="frontendAppUrl"
+            label="Frontend App URL"
+            extra="Confirm after creating the resource in Azure."
+          >
+            <Input placeholder="e.g. https://procuro-acme-frontend.grayriver-3c973afe.uksouth.azurecontainerapps.io" />
           </Form.Item>
           <Form.Item name="imageTag" label="ACR Image Tag">
             <Input placeholder={`Latest: ${LATEST_V5_IMAGE_TAG}`} />
@@ -1618,14 +1726,20 @@ export default function DeploymentsPage() {
             <Descriptions.Item label="Deployment Label">
               {editForm.getFieldValue('deploymentLabel')}
             </Descriptions.Item>
-            <Descriptions.Item label="Container App Name">
+            <Descriptions.Item label="Backend Container App">
               {editForm.getFieldValue('containerAppName') || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Frontend Container App">
+              {editForm.getFieldValue('frontendAppName') || '—'}
             </Descriptions.Item>
             <Descriptions.Item label="Customer Domain">
               {editForm.getFieldValue('customDomain') || '—'}
             </Descriptions.Item>
-            <Descriptions.Item label="Container App URL">
+            <Descriptions.Item label="Backend App URL">
               {editForm.getFieldValue('containerAppUrl') || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Frontend App URL">
+              {editForm.getFieldValue('frontendAppUrl') || '—'}
             </Descriptions.Item>
             <Descriptions.Item label="ACR Image Tag">
               {editForm.getFieldValue('imageTag') || '—'}
@@ -2046,7 +2160,8 @@ export default function DeploymentsPage() {
             <Card size="small" title="Deployment Summary" style={{ marginBottom: 16 }}>
               <Descriptions size="small" column={1} bordered>
                 <Descriptions.Item label="Customer">{setupDeployment.customer?.name}</Descriptions.Item>
-                <Descriptions.Item label="Container App"><Text code>{setupDeployment.containerAppName || '—'}</Text></Descriptions.Item>
+                <Descriptions.Item label="Backend Container"><Text code>{setupDeployment.containerAppName || '—'}</Text></Descriptions.Item>
+                <Descriptions.Item label="Frontend Container"><Text code>{setupDeployment.frontendAppName || '—'}</Text></Descriptions.Item>
                 <Descriptions.Item label="Database"><Text code>{setupDeployment.databaseName || '—'}</Text></Descriptions.Item>
                 <Descriptions.Item label="Domain"><Text code>{setupDeployment.customDomain || '—'}</Text></Descriptions.Item>
                 <Descriptions.Item label="V5 Build"><Text code>{setupDeployment.v5BuildId || '—'}</Text></Descriptions.Item>
@@ -2125,7 +2240,8 @@ export default function DeploymentsPage() {
             <Card size="small" style={{ marginBottom: 16 }}>
               <Descriptions size="small" column={2}>
                 <Descriptions.Item label="Customer">{upgradeDeployment.customer?.name}</Descriptions.Item>
-                <Descriptions.Item label="Container App"><Text code>{upgradeDeployment.containerAppName}</Text></Descriptions.Item>
+                <Descriptions.Item label="Backend Container"><Text code>{upgradeDeployment.containerAppName}</Text></Descriptions.Item>
+                <Descriptions.Item label="Frontend Container"><Text code>{upgradeDeployment.frontendAppName}</Text></Descriptions.Item>
                 <Descriptions.Item label="Current Image Tag"><Tag color="orange">{upgradeDeployment.imageTag || 'none'}</Tag></Descriptions.Item>
                 <Descriptions.Item label="Current V5 Build"><Tag color="blue">{upgradeDeployment.v5BuildId || 'not set'}</Tag></Descriptions.Item>
               </Descriptions>
@@ -2255,12 +2371,17 @@ export default function DeploymentsPage() {
                 <Descriptions.Item label="Customer">{briefCustomer.name}</Descriptions.Item>
                 <Descriptions.Item label="Acronym"><Text code>{briefAcronym}</Text></Descriptions.Item>
                 <Descriptions.Item label="Database Name"><Text code>{briefAcronym}_procuro</Text></Descriptions.Item>
-                <Descriptions.Item label="Container App Name"><Text code>procuro-{briefAcronym}-backend</Text></Descriptions.Item>
+                <Descriptions.Item label="Backend Container"><Text code>procuro-{briefAcronym}-backend</Text></Descriptions.Item>
+                <Descriptions.Item label="Frontend Container"><Text code>procuro-{briefAcronym}-frontend</Text></Descriptions.Item>
                 <Descriptions.Item label="Custom Domain"><Text code>{briefAcronym}.app.pro-curo.com</Text></Descriptions.Item>
-                <Descriptions.Item label="Container App URL">
+                <Descriptions.Item label="Backend URL">
                   <Text code style={{ fontSize: 11 }}>https://procuro-{briefAcronym}-backend.{AZURE_ENV_SUFFIX}</Text>
                 </Descriptions.Item>
-                <Descriptions.Item label="Image Tag"><Text code>{LATEST_V5_IMAGE_TAG}</Text></Descriptions.Item>
+                <Descriptions.Item label="Frontend URL">
+                  <Text code style={{ fontSize: 11 }}>https://procuro-{briefAcronym}-frontend.{AZURE_ENV_SUFFIX}</Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="V5 Build ID"><Text code>{LATEST_V5_BUILD_ID}</Text></Descriptions.Item>
+                <Descriptions.Item label="ACR Image Tag"><Text code>{LATEST_V5_IMAGE_TAG}</Text></Descriptions.Item>
               </Descriptions>
             </Card>
 
