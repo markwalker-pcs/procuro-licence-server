@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../../config/prisma';
+import { config } from '../../config';
 import { logger } from '../../config/logger';
 import type { AdminAuthRequest } from '../../middleware/adminAuth';
 
@@ -21,6 +22,7 @@ router.get('/', async (_req: Request, res: Response) => {
           name: true,
           customerNumber: true,
           deploymentModel: true,
+          customerAcronym: true,
         },
       },
     },
@@ -28,6 +30,21 @@ router.get('/', async (_req: Request, res: Response) => {
   });
 
   res.json({ data: deployments, total: deployments.length });
+});
+
+// GET /api/admin/deployments/script-secrets — Return HMAC secret for setup script generation
+router.get('/script-secrets', async (req: AdminAuthRequest, res: Response) => {
+  if (!req.adminUser) {
+    res.status(401).json({ error: 'Unauthorised' });
+    return;
+  }
+
+  res.json({
+    data: {
+      hmacSecret: config.hmacSecret,
+      licenceServerUrl: `https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io`,
+    },
+  });
 });
 
 // GET /api/admin/deployments/:id — Get single deployment with customer info
@@ -43,6 +60,7 @@ router.get('/:id', async (req: Request, res: Response) => {
           name: true,
           customerNumber: true,
           deploymentModel: true,
+          customerAcronym: true,
         },
       },
       configs: true,
@@ -432,6 +450,7 @@ router.patch('/:id/status', async (req: AdminAuthRequest, res: Response) => {
           name: true,
           customerNumber: true,
           deploymentModel: true,
+          customerAcronym: true,
         },
       },
     },

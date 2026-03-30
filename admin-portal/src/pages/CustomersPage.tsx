@@ -8,6 +8,23 @@ import type { Customer, DeploymentModel } from '../types';
 
 const { Title, Text } = Typography;
 
+// Generate a short acronym from customer name for Azure resource naming
+const generateAcronym = (name: string): string => {
+  const stopWords = new Set([
+    'for', 'of', 'the', 'and', 'in', 'at', 'by', 'to', 'a', 'an',
+    'ltd', 'limited', 'inc', 'incorporated', 'plc', 'llp', 'llc',
+    'corp', 'corporation', 'co', 'company',
+  ]);
+  const words = name
+    .replace(/[^a-zA-Z\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 0 && !stopWords.has(w.toLowerCase()));
+
+  if (words.length === 0) return '';
+  if (words.length === 1) return words[0].substring(0, 6).toLowerCase();
+  return words.map(w => w[0]).join('').substring(0, 10).toLowerCase();
+};
+
 const deploymentModelLabels: Record<DeploymentModel, { label: string; colour: string }> = {
   SAAS: { label: 'SaaS (Hosted)', colour: 'blue' },
   HYBRID: { label: 'Hybrid', colour: 'orange' },
@@ -111,6 +128,13 @@ export default function CustomersPage() {
       sorter: (a: Customer, b: Customer) => a.name.localeCompare(b.name),
     },
     {
+      title: 'Acronym',
+      dataIndex: 'customerAcronym',
+      key: 'customerAcronym',
+      width: 100,
+      render: (v: string | null) => v ? <Text code>{v}</Text> : <Text type="secondary">—</Text>,
+    },
+    {
       title: 'Primary Contact',
       key: 'primaryContact',
       render: (_: unknown, record: Customer) => {
@@ -192,7 +216,26 @@ export default function CustomersPage() {
       >
         <Form form={form} layout="vertical" onFinish={handleCreate}>
           <Form.Item name="name" label="Organisation Name" rules={[{ required: true }]}>
-            <Input placeholder="e.g. Southport NHS Foundation Trust" />
+            <Input
+              placeholder="e.g. Southport NHS Foundation Trust"
+              onChange={(e) => {
+                const acronym = generateAcronym(e.target.value);
+                form.setFieldsValue({ customerAcronym: acronym });
+              }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="customerAcronym"
+            label="Customer Acronym"
+            rules={[
+              { required: true, message: 'Acronym is required' },
+              { min: 2, message: 'At least 2 characters' },
+              { max: 20, message: 'Maximum 20 characters' },
+              { pattern: /^[a-z0-9]+$/, message: 'Lowercase alphanumeric only' },
+            ]}
+            extra="Used for Azure resource naming (database, containers, domain). Cannot be changed after creation."
+          >
+            <Input placeholder="e.g. snhsft" />
           </Form.Item>
           <Form.Item name="primaryContact" label="Primary Contact Name">
             <Input placeholder="e.g. Dr Jane Smith" />
@@ -247,6 +290,12 @@ export default function CustomersPage() {
                 value={editingCustomer.id}
                 disabled
                 style={{ fontSize: 12 }}
+              />
+            </Form.Item>
+            <Form.Item label="Customer Acronym" extra="Set at creation — cannot be changed">
+              <Input
+                value={editingCustomer.customerAcronym || 'Not set'}
+                disabled
               />
             </Form.Item>
             <Form.Item name="name" label="Organisation Name">

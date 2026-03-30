@@ -21,8 +21,9 @@ model Customer {
   contactEmail    String
   contactPhone    String?         // Primary contact telephone number
   primaryContact  String?         // Primary contact person's name
-  deploymentModel DeploymentModel
-  notes           String?
+  deploymentModel   DeploymentModel
+  customerAcronym   String?         @unique  // Short code used for Azure resource naming (e.g. "acme")
+  notes             String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 

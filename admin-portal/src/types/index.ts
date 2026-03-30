@@ -14,6 +14,7 @@ export interface Customer {
   contactPhone: string | null;
   primaryContact: string | null;
   deploymentModel: DeploymentModel;
+  customerAcronym: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -167,6 +168,6 @@ export interface Deployment {
   provisionedBy: string;
   provisionedAt: string;
   updatedAt: string;
-  customer?: { id: string; name: string; customerNumber: string; deploymentModel: DeploymentModel };
+  customer?: { id: string; name: string; customerNumber: string; customerAcronym: string | null; deploymentModel: DeploymentModel };
   configs?: TenantConfig[];
 }

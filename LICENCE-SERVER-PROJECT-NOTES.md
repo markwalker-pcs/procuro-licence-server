@@ -10,9 +10,9 @@
 ## Current Status
 
 **Phase:** Phases 1–6 complete, deployed to Azure
-**Current Build:** PLS-20260330-1545-11
+**Current Build:** PLS-20260330-1730-12
 **Build Status:** Docker build passing, server running on Azure Container Apps
-**Deployed:** Build 10 — Azure Container Apps (UK South), deployed 30 March 2026. Build 11 pending deployment.
+**Deployed:** Build 11 — Azure Container Apps (UK South), deployed 30 March 2026. Build 12 pending deployment.
 **First Successful Build:** 26 March 2026 — health endpoint confirmed at http://localhost:3100/health
 
 ---
@@ -264,6 +264,7 @@ See `.env.example` for full list. Key variables:
 | PLS-20260330-0700-09 | 30 March 2026 | Fix provisioning — added express-async-errors (Express 4 async handler bug), wizard form values now preserved across steps (display:none instead of unmount), per-step field validation, Container App URL made optional, better error messages on POST failures. |
 | PLS-20260330-1200-10 | 30 March 2026 | V5 build tracking — v5BuildId field on deployments, Prepare Azure Setup scripts with SaaS/Hybrid variants, Provision Upgrade modal, Actions dropdown menu, status column with build tags, GitHub link to V5 repo, uniqueness constraints on containerAppName/customDomain/databaseName+host, correct V5 image names (procurov5-backend/procurov5-frontend). |
 | PLS-20260330-1545-11 | 30 March 2026 | Frontend container support — frontendAppName + frontendAppUrl fields on deployments (schema, API, UI), auto-generated UUID/JWT in all setup scripts, provisioning defaults V5 Build ID + image tag to latest, tenant config blank screen fix (grouped API response flattening), resource summary shows both backend and frontend containers with URLs in all scripts, custom domain CNAME points to frontend container, upgrade script uses stored frontend container name. |
+| PLS-20260330-1730-12 | 30 March 2026 | Workflow redesign — Prepare Azure Setup is now the primary provisioning workflow (creates deployment record + generates scripts in one flow). Customer acronym stored on Customer model (immutable after creation, used for Azure resource naming). Licence integration: auto-fetches active licence and HMAC secret for scripts (no more manual placeholders). Multi-step wizard: select customer → validate licence → configure editable resource names → create deployment → show scripts. Provision New Deployment button removed from header; edit available via row Actions dropdown. Script-secrets API endpoint for HMAC secret. Active-licence API endpoint per customer. |
 
 ---
 

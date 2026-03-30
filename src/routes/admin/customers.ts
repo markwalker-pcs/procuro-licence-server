@@ -64,6 +64,7 @@ const createCustomerSchema = z.object({
   contactPhone: z.string().optional(),
   primaryContact: z.string().optional(),
   deploymentModel: z.enum(['SAAS', 'HYBRID', 'ON_PREMISES']),
+  customerAcronym: z.string().min(2, 'Acronym must be at least 2 characters').max(20).regex(/^[a-z0-9]+$/, 'Acronym must be lowercase alphanumeric only').optional(),
   notes: z.string().optional(),
 });
 
@@ -80,6 +81,7 @@ router.post('/', async (req: Request, res: Response) => {
       contactPhone: data.contactPhone || null,
       primaryContact: data.primaryContact || null,
       deploymentModel: data.deploymentModel,
+      customerAcronym: data.customerAcronym || null,
       notes: data.notes,
     },
   });
@@ -182,6 +184,44 @@ router.patch('/:id', async (req: AdminAuthRequest, res: Response) => {
   });
 
   res.json({ data: updatedCustomer });
+});
+
+// GET /api/admin/customers/:id/active-licence — Fetch customer's active licence for deployment scripts
+router.get('/:id/active-licence', async (req: Request, res: Response) => {
+  const customerId = req.params.id as string;
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true, name: true },
+  });
+
+  if (!customer) {
+    res.status(404).json({ error: 'Customer not found' });
+    return;
+  }
+
+  const licence = await prisma.licence.findFirst({
+    where: { customerId, status: 'ACTIVE' },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      licenceKey: true,
+      licenceType: true,
+      licensedUsers: true,
+      expiryDate: true,
+      gracePeriodDays: true,
+      status: true,
+    },
+  });
+
+  if (!licence) {
+    res.status(404).json({
+      error: `No active licence found for ${customer.name}. You need to issue a licence first.`,
+    });
+    return;
+  }
+
+  res.json({ data: licence });
 });
 
 export default router;

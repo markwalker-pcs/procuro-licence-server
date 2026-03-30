@@ -135,11 +135,18 @@ export default function DeploymentsPage() {
   const [bulkConfigForm] = Form.useForm();
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
-  // Pre-provisioning brief state
+  // Prepare Azure Setup state (primary workflow)
   const [briefModalOpen, setBriefModalOpen] = useState(false);
+  const [briefStep, setBriefStep] = useState(0); // 0=select customer, 1=configure resources, 2=scripts
   const [briefCustomer, setBriefCustomer] = useState<Customer | null>(null);
   const [briefAcronym, setBriefAcronym] = useState('');
   const [briefType, setBriefType] = useState<'SAAS' | 'HYBRID' | null>(null);
+  const [briefForm] = Form.useForm();
+  const [briefSubmitting, setBriefSubmitting] = useState(false);
+  const [briefCreatedDeployment, setBriefCreatedDeployment] = useState<Deployment | null>(null);
+  const [briefLicence, setBriefLicence] = useState<any>(null);
+  const [briefLicenceWarning, setBriefLicenceWarning] = useState<string | null>(null);
+  const [briefScriptSecrets, setBriefScriptSecrets] = useState<{ hmacSecret: string; licenceServerUrl: string } | null>(null);
 
   // Setup scripts state (post-provisioning)
   const [setupDrawerOpen, setSetupDrawerOpen] = useState(false);
@@ -581,26 +588,100 @@ export default function DeploymentsPage() {
     }
   };
 
-  const handleBriefCustomerSelected = (customerId: string) => {
+  const handleBriefCustomerSelected = async (customerId: string) => {
     const customer = customers.find(c => c.id === customerId);
     setBriefCustomer(customer || null);
+    setBriefLicence(null);
+    setBriefLicenceWarning(null);
+
     if (customer) {
       const isSaas = customer.deploymentModel === 'SAAS';
       setBriefType(isSaas ? 'SAAS' : 'HYBRID');
-      setBriefAcronym(generateAcronym(customer.name));
+      const acronym = customer.customerAcronym || generateAcronym(customer.name);
+      setBriefAcronym(acronym);
+
+      // Pre-populate editable resource names
+      briefForm.setFieldsValue({
+        deploymentLabel: `${customer.name} Production`,
+        databaseName: `${acronym}_procuro`,
+        containerAppName: `procuro-${acronym}-backend`,
+        frontendAppName: `procuro-${acronym}-frontend`,
+        customDomain: `${acronym}.app.pro-curo.com`,
+        imageTag: LATEST_V5_IMAGE_TAG,
+        v5BuildId: LATEST_V5_BUILD_ID,
+        databaseType: isSaas ? SAAS_DEFAULTS.databaseType : undefined,
+        databaseHost: isSaas ? SAAS_DEFAULTS.databaseHost : undefined,
+        databasePort: isSaas ? SAAS_DEFAULTS.databasePort : undefined,
+        connectivityType: isSaas ? SAAS_DEFAULTS.connectivityType : undefined,
+      });
+
+      // Fetch the customer's active licence
+      try {
+        const res = await api.get(`/admin/customers/${customerId}/active-licence`);
+        setBriefLicence(res.data.data);
+      } catch (err: any) {
+        setBriefLicenceWarning(
+          err.response?.data?.error || 'No active licence found. You need to issue a licence first.'
+        );
+      }
+
+      // Fetch script secrets (HMAC secret etc.)
+      try {
+        const res = await api.get('/admin/deployments/script-secrets');
+        setBriefScriptSecrets(res.data.data);
+      } catch {
+        // Non-fatal — scripts will use placeholders
+      }
     } else {
       setBriefType(null);
       setBriefAcronym('');
     }
   };
 
+  const handleBriefCreateDeployment = async () => {
+    if (!briefCustomer) return;
+    if (!briefLicence) {
+      message.error('No active licence found. Issue a licence before provisioning.');
+      return;
+    }
+
+    setBriefSubmitting(true);
+    try {
+      const values = briefForm.getFieldsValue();
+      const res = await api.post('/admin/deployments', {
+        customerId: briefCustomer.id,
+        deploymentLabel: values.deploymentLabel,
+        containerAppName: values.containerAppName,
+        frontendAppName: values.frontendAppName,
+        customDomain: values.customDomain,
+        databaseName: values.databaseName,
+        databaseType: values.databaseType || 'POSTGRESQL',
+        databaseHost: values.databaseHost,
+        databasePort: values.databasePort,
+        connectivityType: values.connectivityType,
+        imageTag: values.imageTag,
+        v5BuildId: values.v5BuildId,
+      });
+      setBriefCreatedDeployment(res.data.data);
+      setBriefStep(2); // Move to scripts step
+      fetchDeployments(); // Refresh main list
+      message.success('Deployment record created');
+    } catch (err: any) {
+      message.error(err.response?.data?.error || 'Failed to create deployment');
+    } finally {
+      setBriefSubmitting(false);
+    }
+  };
+
   const generateBriefScript = (): string => {
     if (!briefCustomer || !briefAcronym) return '';
 
-    const dbName = `${briefAcronym}_procuro`;
-    const appName = `procuro-${briefAcronym}-backend`;
-    const frontendAppName = `procuro-${briefAcronym}-frontend`;
-    const domain = `${briefAcronym}.app.pro-curo.com`;
+    // Use form values (editable) rather than just the acronym
+    const formValues = briefForm.getFieldsValue();
+    const dbName = formValues.databaseName || `${briefAcronym}_procuro`;
+    const appName = formValues.containerAppName || `procuro-${briefAcronym}-backend`;
+    const frontendAppName = formValues.frontendAppName || `procuro-${briefAcronym}-frontend`;
+    const domain = formValues.customDomain || `${briefAcronym}.app.pro-curo.com`;
     const backendUrl = `https://${appName}.${AZURE_ENV_SUFFIX}`;
     const frontendUrl = `https://${frontendAppName}.${AZURE_ENV_SUFFIX}`;
     const isSaas = briefType === 'SAAS';
@@ -698,8 +779,8 @@ export default function DeploymentsPage() {
       lines.push(`    JWT_SECRET="$JWT_SECRET" \\`);
       lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
       lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
-      lines.push(`    LICENCE_KEY="<LICENCE_KEY>" \\`);
-      lines.push(`    LICENCE_HMAC_SECRET="<LICENCE_HMAC_SECRET>" \\`);
+      lines.push(`    LICENCE_KEY="${briefLicence?.licenceKey || '<LICENCE_KEY>'}" \\`);
+      lines.push(`    LICENCE_HMAC_SECRET="${briefScriptSecrets?.hmacSecret || '<LICENCE_HMAC_SECRET>'}" \\`);
       lines.push(`    LICENCE_INSTANCE_ID="$LICENCE_INSTANCE_ID" \\`);
       lines.push(`    LICENCE_ENABLED=true`);
       lines.push('');
@@ -826,8 +907,8 @@ export default function DeploymentsPage() {
       lines.push(`    JWT_SECRET="$JWT_SECRET" \\`);
       lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
       lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
-      lines.push(`    LICENCE_KEY="<LICENCE_KEY>" \\`);
-      lines.push(`    LICENCE_HMAC_SECRET="<LICENCE_HMAC_SECRET>" \\`);
+      lines.push(`    LICENCE_KEY="${briefLicence?.licenceKey || '<LICENCE_KEY>'}" \\`);
+      lines.push(`    LICENCE_HMAC_SECRET="${briefScriptSecrets?.hmacSecret || '<LICENCE_HMAC_SECRET>'}" \\`);
       lines.push(`    LICENCE_INSTANCE_ID="$LICENCE_INSTANCE_ID" \\`);
       lines.push(`    LICENCE_ENABLED=true`);
       lines.push('');
@@ -941,8 +1022,8 @@ export default function DeploymentsPage() {
       lines.push(`    JWT_SECRET="$JWT_SECRET" \\`);
       lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
       lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
-      lines.push(`    LICENCE_KEY="<FROM_LICENCE_SERVER>" \\`);
-      lines.push(`    LICENCE_HMAC_SECRET="<FROM_LICENCE_SERVER>" \\`);
+      lines.push(`    LICENCE_KEY="<ENTER_LICENCE_KEY>" \\`);
+      lines.push(`    LICENCE_HMAC_SECRET="<ENTER_HMAC_SECRET>" \\`);
       lines.push(`    LICENCE_INSTANCE_ID="$LICENCE_INSTANCE_ID" \\`);
       lines.push(`    LICENCE_ENABLED=true`);
     } else {
@@ -956,8 +1037,8 @@ export default function DeploymentsPage() {
       lines.push(`    JWT_SECRET="$JWT_SECRET" \\`);
       lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
       lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
-      lines.push(`    LICENCE_KEY="<FROM_LICENCE_SERVER>" \\`);
-      lines.push(`    LICENCE_HMAC_SECRET="<FROM_LICENCE_SERVER>" \\`);
+      lines.push(`    LICENCE_KEY="<ENTER_LICENCE_KEY>" \\`);
+      lines.push(`    LICENCE_HMAC_SECRET="<ENTER_HMAC_SECRET>" \\`);
       lines.push(`    LICENCE_INSTANCE_ID="$LICENCE_INSTANCE_ID" \\`);
       lines.push(`    LICENCE_ENABLED=true`);
     }
@@ -1274,6 +1355,14 @@ export default function DeploymentsPage() {
       width: 220,
       render: (_: unknown, record: Deployment) => {
         const menuItems: any[] = [];
+
+        // Edit — always available
+        menuItems.push({
+          key: 'edit',
+          icon: <EditOutlined />,
+          label: 'Edit Deployment',
+          onClick: () => handleEdit(record),
+        });
 
         // Setup Scripts — available for PROVISIONING deployments
         if (record.status === 'PROVISIONING') {
@@ -1771,23 +1860,18 @@ export default function DeploymentsPage() {
               V5 Source
             </Button>
           </Tooltip>
-          <Button icon={<FileTextOutlined />} onClick={() => {
+          <Button type="primary" icon={<CloudOutlined />} onClick={() => {
             setBriefModalOpen(true);
+            setBriefStep(0);
             setBriefCustomer(null);
             setBriefAcronym('');
             setBriefType(null);
+            setBriefLicence(null);
+            setBriefLicenceWarning(null);
+            setBriefCreatedDeployment(null);
+            briefForm.resetFields();
           }}>
             Prepare Azure Setup
-          </Button>
-          <Button type="primary" icon={<RocketOutlined />} onClick={() => {
-            setModalOpen(true);
-            setCurrentStep(0);
-            setSelectedCustomer(null);
-            setDeploymentType(null);
-            setCustomerAcronym('');
-            form.resetFields();
-          }}>
-            Provision New Deployment
           </Button>
         </Space>
       </div>
@@ -2310,112 +2394,246 @@ export default function DeploymentsPage() {
         )}
       </Modal>
 
-      {/* Pre-Provisioning Brief Modal */}
+      {/* Prepare Azure Setup — Multi-step wizard (primary workflow) */}
       <Modal
         title="Prepare Azure Setup"
         open={briefModalOpen}
         onCancel={() => {
           setBriefModalOpen(false);
+          setBriefStep(0);
           setBriefCustomer(null);
           setBriefAcronym('');
           setBriefType(null);
+          setBriefLicence(null);
+          setBriefLicenceWarning(null);
+          setBriefCreatedDeployment(null);
+          briefForm.resetFields();
         }}
-        footer={briefCustomer ? [
-          <Button key="close" onClick={() => {
-            setBriefModalOpen(false);
-            setBriefCustomer(null);
-            setBriefAcronym('');
-            setBriefType(null);
-          }}>Close</Button>,
-          <Button key="print" icon={<PrinterOutlined />} onClick={handlePrintBrief}>Print</Button>,
-          <Button key="copy" type="primary" icon={<CopyOutlined />} onClick={handleCopyBrief}>
-            Copy Script to Clipboard
-          </Button>,
-        ] : null}
-        width={780}
+        footer={
+          briefStep === 0 ? [
+            <Button key="cancel" onClick={() => setBriefModalOpen(false)}>Cancel</Button>,
+            <Button
+              key="next"
+              type="primary"
+              disabled={!briefCustomer || !briefLicence}
+              onClick={() => setBriefStep(1)}
+            >
+              Next — Configure Resources
+            </Button>,
+          ] : briefStep === 1 ? [
+            <Button key="back" onClick={() => setBriefStep(0)}>Back</Button>,
+            <Button
+              key="create"
+              type="primary"
+              loading={briefSubmitting}
+              icon={<RocketOutlined />}
+              onClick={handleBriefCreateDeployment}
+            >
+              Create Deployment & Generate Scripts
+            </Button>,
+          ] : [
+            <Button key="print" icon={<PrinterOutlined />} onClick={handlePrintBrief}>Print</Button>,
+            <Button key="copy" type="primary" icon={<CopyOutlined />} onClick={handleCopyBrief}>
+              Copy Script to Clipboard
+            </Button>,
+            <Button key="close" onClick={() => {
+              setBriefModalOpen(false);
+              setBriefStep(0);
+              setBriefCustomer(null);
+              setBriefCreatedDeployment(null);
+              briefForm.resetFields();
+            }}>Done</Button>,
+          ]
+        }
+        width={820}
       >
-        <div style={{ marginBottom: 16 }}>
-          <Text strong>Select Customer</Text>
-          <Select
-            placeholder="Select a customer to generate setup brief"
-            showSearch
-            optionFilterProp="children"
-            style={{ width: '100%', marginTop: 8 }}
-            value={briefCustomer?.id}
-            onChange={handleBriefCustomerSelected}
-          >
-            {customers.map(c => (
-              <Select.Option key={c.id} value={c.id}>
-                {c.name} ({c.customerNumber})
-              </Select.Option>
-            ))}
-          </Select>
+        <Steps
+          current={briefStep}
+          size="small"
+          style={{ marginBottom: 24 }}
+          items={[
+            { title: 'Customer & Licence' },
+            { title: 'Configure Resources' },
+            { title: 'Setup Scripts' },
+          ]}
+        />
+
+        {/* Step 0: Select Customer & Validate Licence */}
+        <div style={{ display: briefStep === 0 ? 'block' : 'none' }}>
+          <div style={{ marginBottom: 16 }}>
+            <Text strong>Select Customer</Text>
+            <Select
+              placeholder="Select a customer to provision"
+              showSearch
+              optionFilterProp="children"
+              style={{ width: '100%', marginTop: 8 }}
+              value={briefCustomer?.id}
+              onChange={handleBriefCustomerSelected}
+            >
+              {customers.map(c => (
+                <Select.Option key={c.id} value={c.id}>
+                  {c.name} ({c.customerNumber}){c.customerAcronym ? ` — ${c.customerAcronym}` : ''}
+                </Select.Option>
+              ))}
+            </Select>
+          </div>
+
+          {briefCustomer && (
+            <>
+              <Alert
+                message={briefType === 'SAAS' ? 'SaaS Deployment — Pro-curo Azure' : 'Hybrid Deployment — Client Infrastructure'}
+                description={briefType === 'SAAS'
+                  ? 'All Azure resources will be created in our subscription.'
+                  : 'The Container App is created in our Azure, but the database is on the client\'s infrastructure.'
+                }
+                type={briefType === 'SAAS' ? 'info' : 'warning'}
+                showIcon
+                icon={briefType === 'SAAS' ? <CloudOutlined /> : <HomeOutlined />}
+                style={{ marginBottom: 16 }}
+              />
+
+              {!briefCustomer.customerAcronym && (
+                <Alert
+                  message="No acronym set"
+                  description="This customer does not have an acronym set. Please edit the customer record and set one before provisioning."
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                />
+              )}
+
+              {briefLicence ? (
+                <Card size="small" title="Active Licence" style={{ marginBottom: 16 }}>
+                  <Descriptions size="small" column={2}>
+                    <Descriptions.Item label="Licence Key"><Text code style={{ fontSize: 11 }}>{briefLicence.licenceKey}</Text></Descriptions.Item>
+                    <Descriptions.Item label="Type"><Tag color="blue">{briefLicence.licenceType}</Tag></Descriptions.Item>
+                    <Descriptions.Item label="Licensed Users">{briefLicence.licensedUsers}</Descriptions.Item>
+                    <Descriptions.Item label="Expiry">{new Date(briefLicence.expiryDate).toLocaleDateString('en-GB')}</Descriptions.Item>
+                  </Descriptions>
+                </Card>
+              ) : briefLicenceWarning ? (
+                <Alert
+                  message="Licence Required"
+                  description={briefLicenceWarning}
+                  type="error"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                />
+              ) : null}
+            </>
+          )}
         </div>
 
-        {briefCustomer && briefAcronym && (
-          <>
+        {/* Step 1: Configure Azure Resource Names (editable) */}
+        <div style={{ display: briefStep === 1 ? 'block' : 'none' }}>
+          <Alert
+            message="Review and customise the Azure resource names below"
+            description="These have been auto-generated from the customer acronym. Adjust if needed — these names will be used in the setup scripts and stored on the deployment record."
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+
+          <Form form={briefForm} layout="vertical">
+            <Form.Item name="deploymentLabel" label="Deployment Label" rules={[{ required: true }]}>
+              <Input placeholder="e.g. Acme Corp Production" />
+            </Form.Item>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <Form.Item name="containerAppName" label="Backend Container App" rules={[{ required: true }]} style={{ flex: 1 }}>
+                <Input placeholder="e.g. procuro-acme-backend" />
+              </Form.Item>
+              <Form.Item name="frontendAppName" label="Frontend Container App" rules={[{ required: true }]} style={{ flex: 1 }}>
+                <Input placeholder="e.g. procuro-acme-frontend" />
+              </Form.Item>
+            </div>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <Form.Item name="databaseName" label="Database Name" rules={[{ required: true }]} style={{ flex: 1 }}>
+                <Input placeholder="e.g. acme_procuro" />
+              </Form.Item>
+              <Form.Item name="customDomain" label="Custom Domain" rules={[{ required: true }]} style={{ flex: 1 }}>
+                <Input placeholder="e.g. acme.app.pro-curo.com" />
+              </Form.Item>
+            </div>
+            {briefType === 'HYBRID' && (
+              <>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <Form.Item name="databaseType" label="Database Type" style={{ flex: 1 }}>
+                    <Select placeholder="Select database type">
+                      <Select.Option value="POSTGRESQL">PostgreSQL</Select.Option>
+                      <Select.Option value="SQLSERVER">SQL Server</Select.Option>
+                      <Select.Option value="MYSQL">MySQL</Select.Option>
+                      <Select.Option value="MARIADB">MariaDB</Select.Option>
+                    </Select>
+                  </Form.Item>
+                  <Form.Item name="databaseHost" label="Database Host" style={{ flex: 1 }}>
+                    <Input placeholder="Client database hostname" />
+                  </Form.Item>
+                  <Form.Item name="databasePort" label="Port" style={{ width: 100 }}>
+                    <InputNumber placeholder="5432" style={{ width: '100%' }} />
+                  </Form.Item>
+                </div>
+                <Form.Item name="connectivityType" label="Connectivity Type">
+                  <Select placeholder="How do we connect?">
+                    <Select.Option value="PRIVATE_LINK">Private Link</Select.Option>
+                    <Select.Option value="SITE_TO_SITE_VPN">Site-to-Site VPN</Select.Option>
+                    <Select.Option value="EXPRESSROUTE">ExpressRoute</Select.Option>
+                    <Select.Option value="PUBLIC_ENDPOINT">Public Endpoint</Select.Option>
+                  </Select>
+                </Form.Item>
+              </>
+            )}
+            <div style={{ display: 'flex', gap: 16 }}>
+              <Form.Item name="imageTag" label="ACR Image Tag" style={{ flex: 1 }}>
+                <Input placeholder={LATEST_V5_IMAGE_TAG} />
+              </Form.Item>
+              <Form.Item name="v5BuildId" label="V5 Build ID" style={{ flex: 1 }}>
+                <Input placeholder={LATEST_V5_BUILD_ID} />
+              </Form.Item>
+            </div>
+          </Form>
+        </div>
+
+        {/* Step 2: Generated Scripts (after deployment record created) */}
+        <div style={{ display: briefStep === 2 ? 'block' : 'none' }}>
+          {briefCreatedDeployment && (
             <Alert
-              message={briefType === 'SAAS' ? 'SaaS Deployment — Pro-curo Azure' : 'Hybrid Deployment — Client Infrastructure'}
-              description={briefType === 'SAAS'
-                ? 'All Azure resources will be created in our subscription. The script below contains the complete setup commands.'
-                : 'The Container App is created in our Azure, but the database is on the client\'s infrastructure. Confirm connectivity details before running.'
-              }
-              type={briefType === 'SAAS' ? 'info' : 'warning'}
+              message="Deployment record created"
+              description={`Deployment "${briefCreatedDeployment.deploymentLabel}" has been recorded with status Pending Setup. Run the script below in Azure Cloud Shell to create the Azure resources.`}
+              type="success"
               showIcon
-              icon={briefType === 'SAAS' ? <CloudOutlined /> : <HomeOutlined />}
               style={{ marginBottom: 16 }}
             />
+          )}
 
-            <Card size="small" title="Resource Summary" style={{ marginBottom: 16 }}>
-              <Descriptions size="small" column={1} bordered>
-                <Descriptions.Item label="Customer">{briefCustomer.name}</Descriptions.Item>
-                <Descriptions.Item label="Acronym"><Text code>{briefAcronym}</Text></Descriptions.Item>
-                <Descriptions.Item label="Database Name"><Text code>{briefAcronym}_procuro</Text></Descriptions.Item>
-                <Descriptions.Item label="Backend Container"><Text code>procuro-{briefAcronym}-backend</Text></Descriptions.Item>
-                <Descriptions.Item label="Frontend Container"><Text code>procuro-{briefAcronym}-frontend</Text></Descriptions.Item>
-                <Descriptions.Item label="Custom Domain"><Text code>{briefAcronym}.app.pro-curo.com</Text></Descriptions.Item>
-                <Descriptions.Item label="Backend URL">
-                  <Text code style={{ fontSize: 11 }}>https://procuro-{briefAcronym}-backend.{AZURE_ENV_SUFFIX}</Text>
-                </Descriptions.Item>
-                <Descriptions.Item label="Frontend URL">
-                  <Text code style={{ fontSize: 11 }}>https://procuro-{briefAcronym}-frontend.{AZURE_ENV_SUFFIX}</Text>
-                </Descriptions.Item>
-                <Descriptions.Item label="V5 Build ID"><Text code>{LATEST_V5_BUILD_ID}</Text></Descriptions.Item>
-                <Descriptions.Item label="ACR Image Tag"><Text code>{LATEST_V5_IMAGE_TAG}</Text></Descriptions.Item>
-              </Descriptions>
-            </Card>
+          <Card
+            size="small"
+            title="Azure CLI Setup Script"
+            extra={<Button size="small" icon={<CopyOutlined />} onClick={handleCopyBrief}>Copy</Button>}
+          >
+            <pre style={{
+              backgroundColor: '#1e1e1e',
+              color: '#d4d4d4',
+              padding: 16,
+              borderRadius: 6,
+              fontSize: 11,
+              lineHeight: 1.5,
+              maxHeight: 400,
+              overflow: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              margin: 0,
+            }}>
+              {generateBriefScript()}
+            </pre>
+          </Card>
 
-            <Card
-              size="small"
-              title="Azure CLI Setup Script"
-              extra={<Button size="small" icon={<CopyOutlined />} onClick={handleCopyBrief}>Copy</Button>}
-            >
-              <pre style={{
-                backgroundColor: '#1e1e1e',
-                color: '#d4d4d4',
-                padding: 16,
-                borderRadius: 6,
-                fontSize: 11,
-                lineHeight: 1.5,
-                maxHeight: 400,
-                overflow: 'auto',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-                margin: 0,
-              }}>
-                {generateBriefScript()}
-              </pre>
-            </Card>
-
-            <div style={{ marginTop: 12 }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Run these commands in Azure Cloud Shell or a local terminal with Azure CLI.
-                Replace placeholder values (in &lt;angle brackets&gt;) with actual credentials.
-                Once Azure resources are created, return to the admin portal and use <strong>Provision New Deployment</strong> to register the deployment.
-              </Text>
-            </div>
-          </>
-        )}
+          <div style={{ marginTop: 12 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Run these commands in Azure Cloud Shell. Once the Azure resources are created and verified,
+              use the <strong>Mark as Running</strong> action from the deployment row to activate it.
+            </Text>
+          </div>
+        </div>
       </Modal>
     </div>
   );
