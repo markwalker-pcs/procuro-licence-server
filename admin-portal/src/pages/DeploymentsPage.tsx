@@ -1123,6 +1123,38 @@ export default function DeploymentsPage() {
     });
   };
 
+  const handleDownloadSetupScript = (deployment: Deployment) => {
+    const script = generateSetupScript(deployment);
+    const customerName = deployment.customer?.name?.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase() || 'setup';
+    const filename = `procuro-setup-${customerName}.sh`;
+    const blob = new Blob([script], { type: 'text/x-shellscript;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    message.success(`Downloaded ${filename}`);
+  };
+
+  const handleDownloadUpgradeScript = (deployment: Deployment, newTag: string) => {
+    const script = generateUpgradeScript(deployment, newTag);
+    const customerName = deployment.customer?.name?.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase() || 'upgrade';
+    const filename = `procuro-upgrade-${customerName}-${newTag}.sh`;
+    const blob = new Blob([script], { type: 'text/x-shellscript;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    message.success(`Downloaded ${filename}`);
+  };
+
   // ─── Upgrade Script Generator ───
   const generateUpgradeScript = (deployment: Deployment, newTag: string): string => {
     const backendApp = deployment.containerAppName || 'procuro-UNKNOWN-backend';
@@ -2278,9 +2310,10 @@ export default function DeploymentsPage() {
               size="small"
               title="Setup Script"
               extra={
-                <Button size="small" icon={<CopyOutlined />} onClick={() => handleCopySetupScript(setupDeployment)}>
-                  Copy to Clipboard
-                </Button>
+                <Space>
+                  <Button size="small" icon={<DownloadOutlined />} onClick={() => handleDownloadSetupScript(setupDeployment)}>Download .sh</Button>
+                  <Button size="small" icon={<CopyOutlined />} onClick={() => handleCopySetupScript(setupDeployment)}>Copy</Button>
+                </Space>
               }
             >
               <pre style={{
@@ -2393,6 +2426,11 @@ export default function DeploymentsPage() {
               <Card
                 size="small"
                 title={`Upgrade Script: ${upgradeDeployment.imageTag || 'unknown'} → ${upgradeImageTag}`}
+                extra={
+                  <Space>
+                    <Button size="small" icon={<DownloadOutlined />} onClick={() => handleDownloadUpgradeScript(upgradeDeployment, upgradeImageTag)}>Download .sh</Button>
+                  </Space>
+                }
               >
                 <pre style={{
                   backgroundColor: '#1e1e1e',
@@ -2576,7 +2614,7 @@ export default function DeploymentsPage() {
                 <Input placeholder="e.g. acme.app.pro-curo.com" />
               </Form.Item>
             </div>
-            {briefType === 'HYBRID' && (
+            {briefType === 'HYBRID' ? (
               <>
                 <div style={{ display: 'flex', gap: 16 }}>
                   <Form.Item name="databaseType" label="Database Type" style={{ flex: 1 }}>
@@ -2602,6 +2640,14 @@ export default function DeploymentsPage() {
                     <Select.Option value="PUBLIC_ENDPOINT">Public Endpoint</Select.Option>
                   </Select>
                 </Form.Item>
+              </>
+            ) : (
+              <>
+                {/* Hidden fields for SaaS — ensures defaults are persisted via getFieldsValue() */}
+                <Form.Item name="databaseType" hidden><Input /></Form.Item>
+                <Form.Item name="databaseHost" hidden><Input /></Form.Item>
+                <Form.Item name="databasePort" hidden><InputNumber /></Form.Item>
+                <Form.Item name="connectivityType" hidden><Input /></Form.Item>
               </>
             )}
             <div style={{ display: 'flex', gap: 16 }}>
