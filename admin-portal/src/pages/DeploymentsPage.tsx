@@ -4,7 +4,7 @@ import {
   Card, Steps, Descriptions, Popconfirm, Drawer, Collapse, DatePicker, Checkbox, Tooltip,
   Dropdown, Alert,
 } from 'antd';
-import { PlusOutlined, EditOutlined, RocketOutlined, SettingOutlined, DeleteOutlined, CopyOutlined, DownOutlined, CloudOutlined, HomeOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, RocketOutlined, SettingOutlined, DeleteOutlined, CopyOutlined, DownOutlined, CloudOutlined, HomeOutlined, FileTextOutlined, PrinterOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../services/api';
 import type { Customer, Deployment, DatabaseType, ConnectivityType, DeploymentStatus, TenantConfig } from '../types';
@@ -47,8 +47,17 @@ const SAAS_DEFAULTS = {
   connectivityType: 'PRIVATE_LINK' as ConnectivityType,
 };
 
+// Azure Container Apps environment suffix — same for all apps in procuro-env
+const AZURE_ENV_SUFFIX = 'grayriver-3c973afe.uksouth.azurecontainerapps.io';
+
 // Latest deployed image tag — update with each release
 const LATEST_IMAGE_TAG = 'pls-build07';
+
+// Azure Container Registry
+const ACR_SERVER = 'procuroacr-eshnbwa0fvfshzg0.azurecr.io';
+const RESOURCE_GROUP = 'procuro-production';
+const CONTAINER_ENV = 'procuro-env';
+const DB_SERVER_NAME = 'procuro-db';
 
 /**
  * Generate an acronym from a company/organisation name.
@@ -111,6 +120,12 @@ export default function DeploymentsPage() {
   const [bulkConfigForm] = Form.useForm();
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
+  // Pre-provisioning brief state
+  const [briefModalOpen, setBriefModalOpen] = useState(false);
+  const [briefCustomer, setBriefCustomer] = useState<Customer | null>(null);
+  const [briefAcronym, setBriefAcronym] = useState('');
+  const [briefType, setBriefType] = useState<'SAAS' | 'HYBRID' | null>(null);
+
   const fetchDeployments = async () => {
     setLoading(true);
     try {
@@ -167,6 +182,9 @@ export default function DeploymentsPage() {
       const acronym = generateAcronym(customer.name);
       setCustomerAcronym(acronym);
 
+      const appName = acronym ? `procuro-${acronym}-backend` : '';
+      const suggestedUrl = appName ? `https://${appName}.${AZURE_ENV_SUFFIX}` : '';
+
       if (isSaas) {
         // Auto-populate SaaS defaults — our Azure infrastructure
         form.setFieldsValue({
@@ -176,7 +194,8 @@ export default function DeploymentsPage() {
           databaseName: acronym ? `${acronym}_procuro` : '',
           connectivityType: SAAS_DEFAULTS.connectivityType,
           deploymentLabel: `${customer.name} Production`,
-          containerAppName: acronym ? `procuro-${acronym}-backend` : '',
+          containerAppName: appName,
+          containerAppUrl: suggestedUrl,
           customDomain: acronym ? `${acronym}.app.pro-curo.com` : '',
           imageTag: LATEST_IMAGE_TAG,
         });
@@ -189,7 +208,8 @@ export default function DeploymentsPage() {
           databaseName: acronym ? `${acronym}_procuro` : '',
           connectivityType: undefined,
           deploymentLabel: `${customer.name} Production`,
-          containerAppName: acronym ? `procuro-${acronym}-backend` : '',
+          containerAppName: appName,
+          containerAppUrl: suggestedUrl,
           customDomain: acronym ? `${acronym}.app.pro-curo.com` : '',
           imageTag: LATEST_IMAGE_TAG,
         });
@@ -496,6 +516,258 @@ export default function DeploymentsPage() {
       message.error(err.response?.data?.error || 'Failed to add configurations');
     } finally {
       setBulkSubmitting(false);
+    }
+  };
+
+  const handleBriefCustomerSelected = (customerId: string) => {
+    const customer = customers.find(c => c.id === customerId);
+    setBriefCustomer(customer || null);
+    if (customer) {
+      const isSaas = customer.deploymentModel === 'SAAS';
+      setBriefType(isSaas ? 'SAAS' : 'HYBRID');
+      setBriefAcronym(generateAcronym(customer.name));
+    } else {
+      setBriefType(null);
+      setBriefAcronym('');
+    }
+  };
+
+  const generateBriefScript = (): string => {
+    if (!briefCustomer || !briefAcronym) return '';
+
+    const dbName = `${briefAcronym}_procuro`;
+    const appName = `procuro-${briefAcronym}-backend`;
+    const domain = `${briefAcronym}.app.pro-curo.com`;
+    const appUrl = `https://${appName}.${AZURE_ENV_SUFFIX}`;
+    const isSaas = briefType === 'SAAS';
+
+    const lines: string[] = [];
+    lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+    lines.push(`# PRO-CURO V5 — Pre-Provisioning Setup Script`);
+    lines.push(`# Customer: ${briefCustomer.name}`);
+    lines.push(`# Customer No: ${briefCustomer.customerNumber}`);
+    lines.push(`# Deployment Type: ${isSaas ? 'SaaS (Pro-curo Azure)' : 'Hybrid (Client Infrastructure)'}`);
+    lines.push(`# Generated: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
+    lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+    lines.push('');
+    lines.push(`# RESOURCE NAMING SUMMARY`);
+    lines.push(`# ───────────────────────`);
+    lines.push(`# Acronym:            ${briefAcronym}`);
+    lines.push(`# Database Name:      ${dbName}`);
+    lines.push(`# Container App:      ${appName}`);
+    lines.push(`# Custom Domain:      ${domain}`);
+    lines.push(`# Container App URL:  ${appUrl}`);
+    lines.push(`# Image Tag:          ${LATEST_IMAGE_TAG}`);
+    lines.push('');
+
+    if (isSaas) {
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 1: Create the Customer Database`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push('');
+      lines.push(`az postgres flexible-server db create \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --server-name ${DB_SERVER_NAME} \\`);
+      lines.push(`  --database-name ${dbName}`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 2: Create the Container App`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push('');
+      lines.push(`az containerapp create \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --environment ${CONTAINER_ENV} \\`);
+      lines.push(`  --image ${ACR_SERVER}/procuro-v5-backend:${LATEST_IMAGE_TAG} \\`);
+      lines.push(`  --registry-server ${ACR_SERVER} \\`);
+      lines.push(`  --registry-username procuroacr \\`);
+      lines.push(`  --registry-password <ACR_PASSWORD> \\`);
+      lines.push(`  --target-port 3100 \\`);
+      lines.push(`  --ingress external \\`);
+      lines.push(`  --min-replicas 1 --max-replicas 1 \\`);
+      lines.push(`  --cpu 0.5 --memory 1Gi`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 3: Set Environment Variables`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# Generate secrets first:`);
+      lines.push(`#   JWT_SECRET:         openssl rand -hex 32`);
+      lines.push(`#   LICENCE_INSTANCE_ID: uuidgen`);
+      lines.push('');
+      lines.push(`az containerapp update \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --set-env-vars \\`);
+      lines.push(`    DATABASE_URL="postgresql://<USER>:<PASSWORD>@${SAAS_DEFAULTS.databaseHost}:5432/${dbName}" \\`);
+      lines.push(`    NODE_ENV=production \\`);
+      lines.push(`    PORT=3100 \\`);
+      lines.push(`    JWT_SECRET="<GENERATED_JWT_SECRET>" \\`);
+      lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
+      lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
+      lines.push(`    LICENCE_KEY="<FROM_LICENCE_SERVER>" \\`);
+      lines.push(`    LICENCE_HMAC_SECRET="<FROM_LICENCE_SERVER>" \\`);
+      lines.push(`    LICENCE_INSTANCE_ID="<GENERATED_UUID>" \\`);
+      lines.push(`    LICENCE_ENABLED=true`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 4: Configure Custom Domain & SSL`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# First: add a CNAME record in DNS pointing ${domain} to:`);
+      lines.push(`#   ${appName}.${AZURE_ENV_SUFFIX}`);
+      lines.push('');
+      lines.push(`az containerapp hostname add \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --hostname ${domain}`);
+      lines.push('');
+      lines.push(`az containerapp hostname bind \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --hostname ${domain} \\`);
+      lines.push(`  --environment ${CONTAINER_ENV} \\`);
+      lines.push(`  --validation-method CNAME`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 5: Run Database Migration`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push('');
+      lines.push(`az containerapp exec \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --command "npx prisma migrate deploy"`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# DONE — Now go to the Admin Portal → Deployments → Provision`);
+      lines.push(`# Select: ${briefCustomer.name}`);
+      lines.push(`# All fields will auto-populate. Confirm the Container App URL:`);
+      lines.push(`#   ${appUrl}`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+    } else {
+      // Hybrid
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# HYBRID DEPLOYMENT — Client Database`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# The database is managed by the client. Before proceeding, confirm:`);
+      lines.push(`#   - Database platform (PostgreSQL recommended)`);
+      lines.push(`#   - Database host & port`);
+      lines.push(`#   - Database credentials (service account)`);
+      lines.push(`#   - Connectivity method (Private Link, VPN, ExpressRoute, or Public)`);
+      lines.push(`#   - Firewall / IP whitelisting requirements`);
+      lines.push(`#   - SSL/TLS requirements`);
+      lines.push(`# See DOC-024 (Hybrid Deployment Technical Reference) for details.`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 1: Create the Container App (on our Azure)`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push('');
+      lines.push(`az containerapp create \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --environment ${CONTAINER_ENV} \\`);
+      lines.push(`  --image ${ACR_SERVER}/procuro-v5-backend:${LATEST_IMAGE_TAG} \\`);
+      lines.push(`  --registry-server ${ACR_SERVER} \\`);
+      lines.push(`  --registry-username procuroacr \\`);
+      lines.push(`  --registry-password <ACR_PASSWORD> \\`);
+      lines.push(`  --target-port 3100 \\`);
+      lines.push(`  --ingress external \\`);
+      lines.push(`  --min-replicas 1 --max-replicas 1 \\`);
+      lines.push(`  --cpu 0.5 --memory 1Gi`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 2: Verify Connectivity to Client Database`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# Replace <CLIENT_DB_URL> with the client's connection string`);
+      lines.push('');
+      lines.push(`az containerapp update \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --set-env-vars DATABASE_URL="<CLIENT_DB_URL>"`);
+      lines.push('');
+      lines.push(`az containerapp exec \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --command "node -e \\"const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.\\\\\\$connect().then(()=>{console.log('Connected');p.\\\\\\$disconnect()}).catch(e=>console.error(e))\\""`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 3: Set Environment Variables (once connectivity confirmed)`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# Generate secrets first:`);
+      lines.push(`#   JWT_SECRET:         openssl rand -hex 32`);
+      lines.push(`#   LICENCE_INSTANCE_ID: uuidgen`);
+      lines.push('');
+      lines.push(`az containerapp update \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --set-env-vars \\`);
+      lines.push(`    DATABASE_URL="<CLIENT_DB_URL>" \\`);
+      lines.push(`    NODE_ENV=production \\`);
+      lines.push(`    PORT=3100 \\`);
+      lines.push(`    JWT_SECRET="<GENERATED_JWT_SECRET>" \\`);
+      lines.push(`    CORS_ORIGIN="https://${domain}" \\`);
+      lines.push(`    LICENCE_SERVER_URL="https://procuro-licence-server.${AZURE_ENV_SUFFIX}" \\`);
+      lines.push(`    LICENCE_KEY="<FROM_LICENCE_SERVER>" \\`);
+      lines.push(`    LICENCE_HMAC_SECRET="<FROM_LICENCE_SERVER>" \\`);
+      lines.push(`    LICENCE_INSTANCE_ID="<GENERATED_UUID>" \\`);
+      lines.push(`    LICENCE_ENABLED=true`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 4: Configure Custom Domain & SSL`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# First: add a CNAME record in DNS pointing ${domain} to:`);
+      lines.push(`#   ${appName}.${AZURE_ENV_SUFFIX}`);
+      lines.push('');
+      lines.push(`az containerapp hostname add \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --hostname ${domain}`);
+      lines.push('');
+      lines.push(`az containerapp hostname bind \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --hostname ${domain} \\`);
+      lines.push(`  --environment ${CONTAINER_ENV} \\`);
+      lines.push(`  --validation-method CNAME`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# STEP 5: Run Database Migration`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push('');
+      lines.push(`az containerapp exec \\`);
+      lines.push(`  --name ${appName} \\`);
+      lines.push(`  --resource-group ${RESOURCE_GROUP} \\`);
+      lines.push(`  --command "npx prisma migrate deploy"`);
+      lines.push('');
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+      lines.push(`# DONE — Now go to the Admin Portal → Deployments → Provision`);
+      lines.push(`# Select: ${briefCustomer.name}`);
+      lines.push(`# Enter the client's database details in the wizard.`);
+      lines.push(`# Confirm the Container App URL:`);
+      lines.push(`#   ${appUrl}`);
+      lines.push(`# ═══════════════════════════════════════════════════════════════════`);
+    }
+
+    return lines.join('\n');
+  };
+
+  const handleCopyBrief = () => {
+    const script = generateBriefScript();
+    navigator.clipboard.writeText(script).then(() => {
+      message.success('Setup script copied to clipboard');
+    }).catch(() => {
+      message.error('Failed to copy — please select and copy manually');
+    });
+  };
+
+  const handlePrintBrief = () => {
+    const script = generateBriefScript();
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`<html><head><title>Pre-Provisioning Brief — ${briefCustomer?.name || ''}</title><style>
+        body { font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; line-height: 1.5; padding: 24px; white-space: pre-wrap; }
+        @media print { body { font-size: 10px; } }
+      </style></head><body>${script.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</body></html>`);
+      printWindow.document.close();
+      printWindow.print();
     }
   };
 
@@ -815,8 +1087,12 @@ export default function DeploymentsPage() {
           <Form.Item name="customDomain" label="Customer Domain">
             <Input placeholder={customerAcronym ? `e.g. ${customerAcronym}.app.pro-curo.com` : 'e.g. acme.app.pro-curo.com'} />
           </Form.Item>
-          <Form.Item name="containerAppUrl" label="Container App URL">
-            <Input placeholder="e.g. https://procuro-acme.azurecontainerapps.io" />
+          <Form.Item
+            name="containerAppUrl"
+            label="Container App URL"
+            extra="Auto-generated from container app name. Confirm after creating the resource in Azure."
+          >
+            <Input placeholder={customerAcronym ? `https://procuro-${customerAcronym}-backend.${AZURE_ENV_SUFFIX}` : 'Created after Azure provisioning'} />
           </Form.Item>
           <Form.Item name="imageTag" label="Image Tag">
             <Input placeholder={`Latest: ${LATEST_IMAGE_TAG}`} />
@@ -956,8 +1232,12 @@ export default function DeploymentsPage() {
           <Form.Item name="customDomain" label="Customer Domain">
             <Input placeholder="e.g. acme.app.pro-curo.com" />
           </Form.Item>
-          <Form.Item name="containerAppUrl" label="Container App URL">
-            <Input placeholder="e.g. https://procuro-acme.azurecontainerapps.io" />
+          <Form.Item
+            name="containerAppUrl"
+            label="Container App URL"
+            extra="Confirm after creating the resource in Azure."
+          >
+            <Input placeholder="e.g. https://procuro-acme-backend.grayriver-3c973afe.uksouth.azurecontainerapps.io" />
           </Form.Item>
           <Form.Item name="imageTag" label="Image Tag">
             <Input placeholder={`Latest: ${LATEST_IMAGE_TAG}`} />
@@ -1021,16 +1301,26 @@ export default function DeploymentsPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>Deployments</Title>
-        <Button type="primary" icon={<RocketOutlined />} onClick={() => {
-          setModalOpen(true);
-          setCurrentStep(0);
-          setSelectedCustomer(null);
-          setDeploymentType(null);
-          setCustomerAcronym('');
-          form.resetFields();
-        }}>
-          Provision New Deployment
-        </Button>
+        <Space>
+          <Button icon={<FileTextOutlined />} onClick={() => {
+            setBriefModalOpen(true);
+            setBriefCustomer(null);
+            setBriefAcronym('');
+            setBriefType(null);
+          }}>
+            Prepare Azure Setup
+          </Button>
+          <Button type="primary" icon={<RocketOutlined />} onClick={() => {
+            setModalOpen(true);
+            setCurrentStep(0);
+            setSelectedCustomer(null);
+            setDeploymentType(null);
+            setCustomerAcronym('');
+            form.resetFields();
+          }}>
+            Provision New Deployment
+          </Button>
+        </Space>
       </div>
 
       <Card>
@@ -1368,6 +1658,109 @@ export default function DeploymentsPage() {
             size="small"
           />
         </Form>
+      </Modal>
+
+      {/* Pre-Provisioning Brief Modal */}
+      <Modal
+        title="Prepare Azure Setup"
+        open={briefModalOpen}
+        onCancel={() => {
+          setBriefModalOpen(false);
+          setBriefCustomer(null);
+          setBriefAcronym('');
+          setBriefType(null);
+        }}
+        footer={briefCustomer ? [
+          <Button key="close" onClick={() => {
+            setBriefModalOpen(false);
+            setBriefCustomer(null);
+            setBriefAcronym('');
+            setBriefType(null);
+          }}>Close</Button>,
+          <Button key="print" icon={<PrinterOutlined />} onClick={handlePrintBrief}>Print</Button>,
+          <Button key="copy" type="primary" icon={<CopyOutlined />} onClick={handleCopyBrief}>
+            Copy Script to Clipboard
+          </Button>,
+        ] : null}
+        width={780}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Text strong>Select Customer</Text>
+          <Select
+            placeholder="Select a customer to generate setup brief"
+            showSearch
+            optionFilterProp="children"
+            style={{ width: '100%', marginTop: 8 }}
+            value={briefCustomer?.id}
+            onChange={handleBriefCustomerSelected}
+          >
+            {customers.map(c => (
+              <Select.Option key={c.id} value={c.id}>
+                {c.name} ({c.customerNumber})
+              </Select.Option>
+            ))}
+          </Select>
+        </div>
+
+        {briefCustomer && briefAcronym && (
+          <>
+            <Alert
+              message={briefType === 'SAAS' ? 'SaaS Deployment — Pro-curo Azure' : 'Hybrid Deployment — Client Infrastructure'}
+              description={briefType === 'SAAS'
+                ? 'All Azure resources will be created in our subscription. The script below contains the complete setup commands.'
+                : 'The Container App is created in our Azure, but the database is on the client\'s infrastructure. Confirm connectivity details before running.'
+              }
+              type={briefType === 'SAAS' ? 'info' : 'warning'}
+              showIcon
+              icon={briefType === 'SAAS' ? <CloudOutlined /> : <HomeOutlined />}
+              style={{ marginBottom: 16 }}
+            />
+
+            <Card size="small" title="Resource Summary" style={{ marginBottom: 16 }}>
+              <Descriptions size="small" column={1} bordered>
+                <Descriptions.Item label="Customer">{briefCustomer.name}</Descriptions.Item>
+                <Descriptions.Item label="Acronym"><Text code>{briefAcronym}</Text></Descriptions.Item>
+                <Descriptions.Item label="Database Name"><Text code>{briefAcronym}_procuro</Text></Descriptions.Item>
+                <Descriptions.Item label="Container App Name"><Text code>procuro-{briefAcronym}-backend</Text></Descriptions.Item>
+                <Descriptions.Item label="Custom Domain"><Text code>{briefAcronym}.app.pro-curo.com</Text></Descriptions.Item>
+                <Descriptions.Item label="Container App URL">
+                  <Text code style={{ fontSize: 11 }}>https://procuro-{briefAcronym}-backend.{AZURE_ENV_SUFFIX}</Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="Image Tag"><Text code>{LATEST_IMAGE_TAG}</Text></Descriptions.Item>
+              </Descriptions>
+            </Card>
+
+            <Card
+              size="small"
+              title="Azure CLI Setup Script"
+              extra={<Button size="small" icon={<CopyOutlined />} onClick={handleCopyBrief}>Copy</Button>}
+            >
+              <pre style={{
+                backgroundColor: '#1e1e1e',
+                color: '#d4d4d4',
+                padding: 16,
+                borderRadius: 6,
+                fontSize: 11,
+                lineHeight: 1.5,
+                maxHeight: 400,
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                margin: 0,
+              }}>
+                {generateBriefScript()}
+              </pre>
+            </Card>
+
+            <div style={{ marginTop: 12 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Run these commands in Azure Cloud Shell or a local terminal with Azure CLI.
+                Replace placeholder values (in &lt;angle brackets&gt;) with actual credentials.
+                Once Azure resources are created, return to the admin portal and use <strong>Provision New Deployment</strong> to register the deployment.
+              </Text>
+            </div>
+          </>
+        )}
       </Modal>
     </div>
   );

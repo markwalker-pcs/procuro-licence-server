@@ -9,10 +9,10 @@
 
 ## Current Status
 
-**Phase:** Phases 1–5 complete, deployed to Azure
-**Current Build:** PLS-20260327-pls-build06
+**Phase:** Phases 1–6 complete, deployed to Azure
+**Current Build:** PLS-20260327-1000-07
 **Build Status:** Docker build passing, server running on Azure Container Apps
-**Deployed:** Yes — Azure Container Apps (UK South), Build 06 deployed 27 March 2026
+**Deployed:** Yes — Azure Container Apps (UK South), Build 07 deployed 27 March 2026
 **First Successful Build:** 26 March 2026 — health endpoint confirmed at http://localhost:3100/health
 
 ---
@@ -259,6 +259,7 @@ See `.env.example` for full list. Key variables:
 | PLS-20260326-2230-04 | 26 March 2026 | Phase 4 — dual licensing (PER_USER + CONCURRENT), configurable grace period, @pro-curo/licence-client package, V5 backend + frontend integration, login enforcement, licence status UI |
 | PLS-20260327-build05 | 27 March 2026 | Phase 5 — Password auth (bcrypt) for admin portal, customer editing (PATCH + edit modal), deployment model change audit logging, NODE_ENV set to production |
 | PLS-20260327-build06 | 27 March 2026 | Phase 6 — Deployments page (provisioning workflow, 4-step wizard), Tenant Configuration store (per-deployment key-value config, env vars, feature flags, quick-add templates, secret masking), custom domain + SSL cert tracking. TS fixes: adminUser guard, Tag color prop, form value casts, Typography.Title. |
+| PLS-20260327-1000-07 | 27 March 2026 | Smart provisioning wizard — auto-populate from customer deployment model (SaaS/Hybrid), acronym-based naming (database, domain, container app), latest image tag default, custom domain in table + edit modal, seed passwordHash fix for existing users. |
 
 ---
 
@@ -327,7 +328,7 @@ See `.env.example` for full list. Key variables:
 | Licence Server API | `procuro-licence-server` | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
 | Admin Portal | `procuro-licence-admin` | https://procuro-licence-admin.grayriver-3c973afe.uksouth.azurecontainerapps.io/ |
 | Database | `procuro_licence` on `procuro-db` | Same Azure PostgreSQL server as V5 |
-| Container Registry | `procuroacr` | Image tags: `pls-build06` |
+| Container Registry | `procuroacr` | Image tags: `pls-build07` |
 | Health Check | — | https://procuro-licence-server.grayriver-3c973afe.uksouth.azurecontainerapps.io/health |
 
 **Container App Resources:**
@@ -374,6 +375,7 @@ az containerapp update -n procuro-licence-admin -g procuro-production --image pr
 | 04 | 26 March 2026 | pls-build04 | pls-build04 | First Azure deployment. API + admin portal + database seeded. |
 | 05 | 27 March 2026 | pls-build05 | pls-build05 | Password auth for admin portal (bcrypt), customer editing (PATCH endpoint + edit modal), deployment model change audit logging, NODE_ENV set to production. |
 | 06 | 27 March 2026 | pls-build06 | pls-build06 | Deployments page (4-step provisioning wizard), Tenant Configuration store (key-value config, secret masking, quick-add templates), custom domain/SSL tracking, TS build fixes. |
+| 07 | 27 March 2026 | pls-build07 | pls-build07 | Smart provisioning wizard (auto-populate from customer deployment model), acronym naming, latest image tag default, seed passwordHash fix. Admin login now works. |
 
 ### Local Development
 
